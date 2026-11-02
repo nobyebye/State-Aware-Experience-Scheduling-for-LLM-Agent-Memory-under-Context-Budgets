@@ -54,11 +54,32 @@ def test_first_action_relabels_sql_verb_actions():
     assert parse(first_action('Action: Query\n```mysql\nSELECT 1\n```')).content == 'SELECT 1'
 
 
-def test_first_action_keeps_invalid_without_block():
-    """没有代码块的回复仍为无效动作（不猜测裸 SQL）。"""
-    for text in ('Action: SELECT\nSELECT customer_id FROM t LIMIT 5;', 'Action: Operation\nSELECT 1',
-                 'SELECT 1', 'Action: Query\nno sql here\nAction: Operation\nSELECT 2'):
-        assert parse(first_action(text)).kind == 'invalid'
+def test_first_action_keeps_invalid_without_sql():
+    """没有可识别 SQL 的回复仍为无效动作。"""
+    for text in ('SELECT 1', 'Action: Query\nno sql here\nAction: Operation\nSELECT 2',
+                 'Action: Operation\nI will now look at the table.', 'Action: Operation\n'):
+        assert parse(first_action(text)).kind == 'invalid', text
+
+
+def test_first_action_takes_bare_sql():
+    """Llama-3.1-8B 常省略代码块（VM 小试中约一半回复）；取动作行后的裸 SQL，截掉编造的结果表格。"""
+    cases = [
+        ("Action: Operation\nUPDATE media_submissions\nSET status = 'approved'\nWHERE word_count > 1000;",
+         "UPDATE media_submissions\nSET status = 'approved'\nWHERE word_count > 1000;"),
+        ("Action: Operation\nINSERT INTO p (a, b)\nVALUES (NULL, 102);\n\n+------+\n| a    |\n+-----",
+         'INSERT INTO p (a, b)\nVALUES (NULL, 102);'),
+        ('Action: Operation\nSELECT a, b\nFROM t\nWHERE b >= 4\nLIMIT 5\n;\n+----+\n| a  |\n',
+         'SELECT a, b\nFROM t\nWHERE b >= 4\nLIMIT 5\n;'),
+        ('Action: Operation\nSELECT region\nFROM t\nGROUP BY region', 'SELECT region\nFROM t\nGROUP BY region'),
+        ('Action: SELECT\nSELECT customer_id FROM t LIMIT 5;', 'SELECT customer_id FROM t LIMIT 5;'),
+        ("Action: UPDATE media_submissions SET status = 'approved' WHERE reviewed = 0",
+         "UPDATE media_submissions SET status = 'approved' WHERE reviewed = 0"),
+        ('Action: Operation\nSELECT 1\n\nThe result will show one row.', 'SELECT 1'),
+        ('Action: Operation\nSELECT 1;\nAction: Answer\nFinal Answer: [(1,)]', 'SELECT 1;'),
+    ]
+    for text, sql in cases:
+        out = first_action(text)
+        assert parse(out) == Parsed('operation', sql), (text, out)
 
 
 def test_first_action_relabel_uses_first_action_only():
@@ -77,10 +98,10 @@ def test_reparse_command(tmp_path, capsys):
              'turns': [{'raw_response': 'Action: Query\n```sql\nSELECT 1\n```', 'action': 'invalid',
                         'parse_reason': 'no_action'}]},
             {'run_key': 'b', 'status': 'invalid_action', 'success': False,
-             'turns': [{'raw_response': 'Action: SELECT\nSELECT 1;', 'action': 'invalid',
+             'turns': [{'raw_response': 'Action: Operation\nLet me check the table first.', 'action': 'invalid',
                         'parse_reason': 'no_action'}]}]
     f = tmp_path / 'r.jsonl'
     f.write_text(''.join(json.dumps(r) + '\n' for r in recs), encoding='utf-8')
     assert main(['reparse', '--runs', str(f)]) == 0
     out = capsys.readouterr().out
-    assert "'operation': 1" in out and "'invalid:no_action': 1" in out
+    assert "'operation': 1" in out and "'invalid:no_sql_block': 1" in out

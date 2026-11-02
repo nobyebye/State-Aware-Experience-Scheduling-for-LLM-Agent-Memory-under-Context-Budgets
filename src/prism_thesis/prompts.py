@@ -34,7 +34,9 @@ ACTION_UNITS = [
     Unit('op_format', 'core', 'To operate the database, output exactly the following; the first line is always '
          'the literal text "Action: Operation", and the SQL must be inside the ```sql code block:\n'
          'Action: Operation\n```sql\nYOUR_SQL\n```\n'
-         'The SQL will be executed and you will receive the raw MySQL result.', core=True),
+         'For example:\nAction: Operation\n```sql\nSELECT name FROM employees WHERE age > 30;\n```\n'
+         'The SQL will be executed and you will receive the raw MySQL result. '
+         'Do not write the result yourself.', core=True),
     Unit('answer_action', 'core', 'When you are done, output exactly (the first line is always "Action: Answer"):\n'
          'Action: Answer\nFinal Answer: YOUR_ANSWER_ON_ONE_LINE', core=True),
 ]
