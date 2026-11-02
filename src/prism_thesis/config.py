@@ -74,12 +74,21 @@ def memory_path(cfg: dict) -> Path:
     return p if p.is_absolute() else ROOT / p
 
 
-def make_retriever(cfg: dict, settings: dict) -> Retriever:
+class RehearsalArtifact(ValueError):
+    """演练产物（脚本化运行、未经正式检查的构建或演练洞见）被用于正式实验。"""
+
+
+def make_retriever(cfg: dict, settings: dict, allow_rehearsal: bool = False) -> Retriever:
+    """正式（付费）运行只接受正式构建的记忆库：meta.rehearsal 必须明确为 false。"""
     path = memory_path(cfg)
     if not path.exists():
         raise FileNotFoundError(f'记忆库 {path} 不存在：先用 nomem 条件在构建集与开发集上运行，再 build-memory')
+    store = MemoryStore.load(path)
+    if not allow_rehearsal and store.meta.get('rehearsal') is not False:
+        raise RehearsalArtifact(f'记忆库 {path} 是演练产物或来源不明（meta.rehearsal={store.meta.get("rehearsal")!r}），'
+                                '不能用于正式运行；请用正式记录重新 build-memory')
     bm = settings.get('bm25', {})
-    return Retriever(MemoryStore.load(path), settings.get('k_examples', 3), settings.get('k_insights', 3),
+    return Retriever(store, settings.get('k_examples', 3), settings.get('k_insights', 3),
                      settings.get('k_repairs', 2), bm.get('k1', 1.2), bm.get('b', 0.75))
 
 
@@ -103,14 +112,15 @@ def _table(cfg: dict, key: str = 'risk_table') -> RiskTable:
     return RiskTable.load(table_path(cfg, key))
 
 
-def make_policy(condition: str, cfg: dict, counter: TokenCounter):
+def make_policy(condition: str, cfg: dict, counter: TokenCounter, allow_rehearsal_memory: bool = False):
+    """allow_rehearsal_memory：只在不付费的演练与查看提示时为 True。"""
     base, _ = split_condition(condition)
     policy = _make_base_policy(base, cfg, counter)
     if base == 'nomem':
         policy.name = 'nomem'
     settings = memory_settings(cfg, condition)
     if settings is not None:
-        policy.memory = make_retriever(cfg, settings)
+        policy.memory = make_retriever(cfg, settings, allow_rehearsal_memory)
     if base != condition:
         policy.name = condition
     return policy

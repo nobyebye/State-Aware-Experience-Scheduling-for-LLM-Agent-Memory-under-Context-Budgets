@@ -1,6 +1,7 @@
 """离线构建记忆库：从构建集与开发集上不带记忆（nomem）的运行记录中整理经验条目。
 
-- 成功示例：每道题取一次成功运行（轮数最少、重复编号最小者），记录任务指令、最后一条执行成功的 SQL 与最终答案；
+- 成功示例：每道题取一次成功运行（轮数最少、重复编号最小者），记录任务指令、按顺序执行成功的全部 SQL
+  （多步操作如先 UPDATE 再 DELETE 都保留；出错的操作不写入示例）与最终答案；
   答案超过 max_answer_chars 个字符时只说明格式，不写出具体值；
 - 修复经验：成功运行中“某轮 SQL 出错、之后某轮 SQL 执行成功”的片段，记录错误签名、错误信息首行、
   出错的 SQL 与改正后的 SQL；同一道题同一签名只保留一条；
@@ -43,12 +44,14 @@ def _usable(records: Iterable[Mapping]) -> list[Mapping]:
     return sorted(rs, key=lambda r: (r['task_id'], r['rep']))
 
 
-def example_text(task: Task, sql: str, answer: str, max_answer_chars: int) -> str:
+def example_text(task: Task, sqls: Sequence[str], answer: str, max_answer_chars: int) -> str:
+    if isinstance(sqls, str):
+        sqls = [sqls]
     if answer is None or len(answer) > max_answer_chars:
         answer = '(the result rows exactly as returned by MySQL)' if task_type(task.instruction) == 'query' \
             else 'done'
-    return (f'Example task: {task.instruction}\nAction: Operation\n```sql\n{sql}\n```\n'
-            f'Action: Answer\nFinal Answer: {answer}')
+    ops = ''.join(f'Action: Operation\n```sql\n{sql}\n```\n' for sql in sqls)
+    return f'Example task: {task.instruction}\n{ops}Action: Answer\nFinal Answer: {answer}'
 
 
 def repair_text(error_line: str, failed: str, fixed: str) -> str:
@@ -71,12 +74,12 @@ def extract_examples(records: Sequence[Mapping], tasks: Mapping[int, Task],
             continue
         key = (len(r.get('turns', [])), r['rep'])
         if r['task_id'] not in best or key < best[r['task_id']][0]:
-            best[r['task_id']] = (key, ok_sql[-1], r.get('answer'))
+            best[r['task_id']] = (key, tuple(ok_sql), r.get('answer'))
     out = []
     for tid in sorted(best):
         task = tasks[tid]
-        _, sql, answer = best[tid]
-        out.append(Experience(f'ex-{tid}', 'example', example_text(task, sql, answer, max_answer_chars),
+        _, sqls, answer = best[tid]
+        out.append(Experience(f'ex-{tid}', 'example', example_text(task, sqls, answer, max_answer_chars),
                               task.instruction, task_type(task.instruction), **_source(task)))
     return out
 

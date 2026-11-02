@@ -26,7 +26,7 @@ from typing import Callable, Iterable, Optional
 
 from . import __version__
 from .agent import run_episode, task_features
-from .config import ROOT, make_policy, memory_path, memory_settings, table_key, table_path
+from .config import ROOT, make_policy, memory_path, memory_settings, split_condition, table_key, table_path
 from .data import Task
 from .env import MySQLServer, TaskSession
 from .tokens import TokenCounter
@@ -88,7 +88,7 @@ def experiment_fingerprint(cfg: dict, condition: str, paid: bool = True) -> str:
     if settings is not None:            # 记忆库内容与检索设置（无记忆条件不依赖记忆库）
         path = memory_path(cfg)
         parts['memory'] = {'store': _sha(path.read_bytes()) if path.exists() else 'missing', 'retrieval': settings}
-    if condition.partition('@')[0] in ('random_drop', 'llmlingua2'):
+    if split_condition(condition)[0].partition('@')[0] in ('random_drop', 'llmlingua2'):
         parts['baselines'] = cfg['baselines']
     return _sha(_canon(parts))[:16]
 
@@ -225,7 +225,7 @@ def run_experiment(cfg: dict, tasks: list[Task], conditions: list[str], reps: in
     out.parent.mkdir(parents=True, exist_ok=True)
     counter = TokenCounter()
     for c in conditions:                 # 在主线程先构造一次，风险表缺失等错误立即报告
-        make_policy(c, cfg, counter)
+        make_policy(c, cfg, counter, allow_rehearsal_memory=not paid)
     fingerprints = {c: experiment_fingerprint(cfg, c, paid) for c in conditions}
     repair_tail(out, log)
     existing = read_lines(out)
@@ -273,7 +273,7 @@ def run_experiment(cfg: dict, tasks: list[Task], conditions: list[str], reps: in
                 key = run_key(cond, task.task_id, rep)
                 seed = run_seed(cfg['run']['seed'], key)
                 if cond not in policies:
-                    policies[cond] = make_policy(cond, cfg, counter)
+                    policies[cond] = make_policy(cond, cfg, counter, allow_rehearsal_memory=not paid)
                 rec = {'run_key': key, 'condition': cond, 'split': task.split, 'task_id': task.task_id,
                        'group_id': task.group_id, 'rep': rep, 'seed': seed, 'code_version': version,
                        'fingerprint': fingerprints[cond],

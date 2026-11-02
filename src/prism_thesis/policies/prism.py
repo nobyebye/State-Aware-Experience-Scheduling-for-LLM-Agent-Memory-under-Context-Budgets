@@ -79,8 +79,8 @@ class PrismPolicy(Policy):
                       self.epsilon, self.step, self.reincluded, solver)
         info = {'phase': phase, 'reincluded': sorted(self.reincluded), 'n_repairs': len(repairs)}
         exp_units = frozenset(u for g, us in groups.items() for u in us if is_exp(u))
-        if drop is None:
-            return Plan(prefix=ALL_IDS, tail=exp_units, tail_in_system=self.tail_in_system,
+        if drop is None:                  # 风险表缺项：全部发送，布局不变（稳定前缀只含核心单元）
+            return Plan(prefix=CORE_IDS, tail=(ALL_IDS - CORE_IDS) | exp_units, tail_in_system=self.tail_in_system,
                         info={**info, 'fallback': 'unseen_state'})
         selected = frozenset().union(*(u for g, u in groups.items() if g not in drop))
         return Plan(prefix=CORE_IDS, tail=selected - CORE_IDS, tail_in_system=self.tail_in_system,

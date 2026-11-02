@@ -26,7 +26,7 @@ from pathlib import Path
 from . import stats
 from .checks import REHEARSAL_BANNER, check_records
 from .agent import build_messages, task_features
-from .config import ROOT, load_config, make_policy, make_retriever, memory_path, memory_settings
+from .config import ROOT, RehearsalArtifact, load_config, make_policy, make_retriever, memory_path, memory_settings
 from .data import load_tasks
 from .env import MySQLServer, TaskSession
 from .evaluate import match_direct
@@ -101,7 +101,7 @@ def cmd_show_prompt(args, cfg):
     counter = TokenCounter()
     task = next(t for t in load_tasks(include_excluded=True) if t.task_id == args.task_id)
     import random
-    policy = make_policy(args.condition, cfg, counter)
+    policy = make_policy(args.condition, cfg, counter, allow_rehearsal_memory=True)
     policy.start(task, task_features(task), random.Random(0))
     plan = policy.plan(TurnState(0, phase(0, None), None))
     messages, _ = build_messages(task, plan, [], policy.store)
@@ -119,7 +119,7 @@ def cmd_dry_run(args, cfg):
     try:
         state = run_experiment(cfg, _tasks(args), args.conditions.split(','), args.reps, out,
                                lambda task: scripted.make(args.agent, task), paid=False, workers=args.workers)
-    except (ExperimentMismatch, FileNotFoundError) as e:
+    except (ExperimentMismatch, FileNotFoundError, RehearsalArtifact) as e:
         print(f'拒绝运行：{e}')
         return 1
     if exit_code(state):
@@ -149,7 +149,7 @@ def cmd_run(args, cfg):
     try:
         state = run_experiment(cfg, _tasks(args), args.conditions.split(','), args.reps, Path(args.out),
                                lambda task: llm, paid=True, workers=args.workers)
-    except (ExperimentMismatch, FileNotFoundError) as e:
+    except (ExperimentMismatch, FileNotFoundError, RehearsalArtifact) as e:
         print(f'拒绝运行：{e}')
         return 1
     code = exit_code(state)
@@ -276,8 +276,12 @@ def cmd_compare(args, cfg):
     return 0
 
 
-def _insight_file(path) -> list[Experience]:
+def _insight_file(path, rehearsal: bool) -> list[Experience]:
+    """读取洞见文件。正式构建只接受正式提炼的洞见（meta.rehearsal 明确为 false），演练标记不能被覆盖。"""
     data = json.loads(Path(path).read_text(encoding='utf-8'))
+    flag = (data.get('meta') or {}).get('rehearsal')
+    if not rehearsal and flag is not False:
+        raise ValueError(f'洞见文件 {path} 是演练产物或来源不明（meta.rehearsal={flag!r}），正式构建不能使用')
     out = []
     for e in data['insights']:
         for k in ('source_tasks', 'source_groups', 'source_splits'):
@@ -319,9 +323,9 @@ def cmd_build_memory(args, cfg):
     mcfg = cfg['memory']
     entries = mbuild.extract_examples(recs, tasks, mcfg.get('max_answer_chars', 300)) + \
         mbuild.extract_repairs(recs, tasks)
-    if args.insights:
-        entries += _insight_file(args.insights)
     try:
+        if args.insights:
+            entries += _insight_file(args.insights, args.rehearsal)
         store = MemoryStore(entries, meta={
             'runs': [{'path': str(p), 'sha256': hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in args.runs],
             'n_records': len(recs), 'insights': str(args.insights) if args.insights else None,
@@ -392,7 +396,7 @@ def cmd_show_memory(args, cfg):
     if settings is None:
         print('该条件不使用经验记忆')
         return 1
-    retriever = make_retriever(cfg, settings)
+    retriever = make_retriever(cfg, settings, allow_rehearsal=True)
     task = next(t for t in load_tasks(include_excluded=True) if t.task_id == args.task_id)
     groups = retriever.static(task, task_type(task.instruction))
     counter = TokenCounter()

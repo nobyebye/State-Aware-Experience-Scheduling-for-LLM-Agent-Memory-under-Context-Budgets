@@ -113,6 +113,16 @@ def test_extract_examples_and_repairs():
     assert 'Failed SQL:\nSELECT x' in rp[0].text and 'Corrected SQL:\nSELECT a' in rp[0].text
 
 
+def test_multi_step_success_keeps_all_operations():
+    """审查 P2：先 UPDATE 再 DELETE 的成功轨迹，示例保留两步；出错的操作不写入。"""
+    t = DEV[0]
+    r = rec(t, 0, True, [op('UPDATE t SET a = 1'), op('SELEC x', False, 1064, 'syntax'), op('DELETE FROM t WHERE a = 2'),
+                         ans('done')], answer='done')
+    text = mbuild.extract_examples([r], TASKS)[0].text
+    assert text.index('UPDATE t SET a = 1') < text.index('DELETE FROM t WHERE a = 2') and 'SELEC x' not in text
+    assert text.count('Action: Operation') == 2
+
+
 def test_failed_runs_give_no_examples_and_long_answers_are_hidden():
     t = DEV[0]
     assert mbuild.extract_examples([rec(t, 0, False, [op('SELECT 1'), ans('[(2,)]')])], TASKS) == []
@@ -248,8 +258,24 @@ def test_prism_missing_experience_risk_falls_back_to_full():
     store = sample_store()
     p = start(with_memory(PrismPolicy(table(0.0, SELECTABLE_GROUPS), 2.0, COUNTER), store))
     plan = p.plan(S0)
-    assert plan.info['fallback'] == 'unseen_state' and plan.prefix == ALL_IDS
+    assert plan.info['fallback'] == 'unseen_state' and plan.prefix == CORE_IDS and ALL_IDS <= plan.units
     assert len({u for u in plan.tail if is_exp(u)}) == 3
+
+
+def test_fallback_keeps_stable_prefix():
+    """审查 P2：有风险估计的状态与缺项状态之间，系统消息与第一条用户消息不变。"""
+    store = sample_store()
+    t = table(0.0)
+    for k in [k for k in t.entries if k.split('|')[1] == 'after_success']:
+        del t.entries[k]
+    p = start(with_memory(PrismPolicy(t, 2.0, COUNTER), store))
+    history = [{'role': 'assistant', 'content': 'Action: Operation\n```sql\nSELECT 1\n```'},
+               {'role': 'user', 'content': '[(1,)]'}]
+    m0, _ = build_messages(QUERY, p.plan(S0), [], store)
+    fb = p.plan(S_OK)
+    assert fb.info['fallback'] == 'unseen_state'
+    m1, _ = build_messages(QUERY, fb, history, store)
+    assert m1[0] == m0[0] and m1[1] == m0[1]
 
 
 def test_phase_switch_with_memory():
@@ -278,8 +304,60 @@ def test_greedy_is_feasible_and_never_better_than_exact():
 def mem_cfg(tmp_path, store=None):
     cfg = copy.deepcopy(load_config(ROOT / 'configs' / 'default.json'))
     cfg['memory']['store'] = str(tmp_path / 'memory.json')
-    (store or sample_store()).save(tmp_path / 'memory.json')
+    store = store or sample_store()
+    store.meta['rehearsal'] = False
+    store.save(tmp_path / 'memory.json')
     return cfg
+
+
+def test_baseline_parameters_in_identity_with_k_modifier(tmp_path):
+    """审查 P1：random_drop#k=1、llmlingua2#k=1 的指纹也包含基线参数。"""
+    cfg = mem_cfg(tmp_path)
+    for cond in ('random_drop', 'random_drop#k=1', 'llmlingua2#k=1'):
+        a = experiment_fingerprint(cfg, cond)
+        c2 = copy.deepcopy(cfg)
+        c2['baselines']['random_k'] += 1
+        c2['baselines']['llmlingua2']['rate'] = 0.5
+        assert experiment_fingerprint(c2, cond) != a, cond
+
+
+def test_rehearsal_memory_refused_for_formal_runs(tmp_path):
+    """审查 P1：演练记忆库或来源不明的记忆库不能用于正式（付费）运行；演练运行仍可使用。"""
+    from prism_thesis.config import RehearsalArtifact
+    from prism_thesis.runner import run_experiment
+    cfg = mem_cfg(tmp_path)
+    for flag in (True, None):
+        st = MemoryStore.load(tmp_path / 'memory.json')
+        st.meta['rehearsal'] = flag
+        st.save(tmp_path / 'memory.json')
+        with pytest.raises(RehearsalArtifact):
+            make_policy('full', cfg, COUNTER)
+        with pytest.raises(RehearsalArtifact):
+            run_experiment(cfg, DEV[:1], ['full'], 1, tmp_path / 'r.jsonl', lambda t: None, paid=True, workers=1,
+                           log=lambda m: None)
+        assert make_policy('full', cfg, COUNTER, allow_rehearsal_memory=True).memory is not None
+        assert make_policy('nomem', cfg, COUNTER).memory is None
+
+
+def test_formal_build_refuses_rehearsal_insights(tmp_path, capsys):
+    """审查 P1：演练洞见不能进入正式记忆库；演练构建的记忆库带演练标记。"""
+    from prism_thesis.memory.build import check_sources  # noqa: F401
+    cfg_path = tmp_path / 'cfg.json'
+    cfg_path.write_text(json.dumps(mem_cfg(tmp_path)), encoding='utf-8')
+    ins = tmp_path / 'ins.json'
+    for meta in ({'rehearsal': True}, {}):
+        ins.write_text(json.dumps({'meta': meta, 'insights': []}), encoding='utf-8')
+        assert cli._insight_file(ins, rehearsal=True) == []
+        with pytest.raises(ValueError):
+            cli._insight_file(ins, rehearsal=False)
+    ins.write_text(json.dumps({'meta': {'rehearsal': False}, 'insights': []}), encoding='utf-8')
+    assert cli._insight_file(ins, rehearsal=False) == []
+    runs = tmp_path / 'runs.jsonl'
+    _write(runs, sample_records(DEV[:2]))
+    out = tmp_path / 'store.json'
+    assert cli.main(['--config', str(cfg_path), 'build-memory', '--runs', str(runs), '--out', str(out),
+                     '--rehearsal']) == 0
+    assert MemoryStore.load(out).meta['rehearsal'] is True
 
 
 def test_condition_modifiers():
