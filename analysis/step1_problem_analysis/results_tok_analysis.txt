@@ -1,0 +1,18 @@
+system total 260 | function list 80 | instructions 181
+runs 330 success 0.597 mean turns 2.15
+provider prompt_tokens exact match 709/709
+system           558.6  58.5%
+task             183.6  19.2%
+history_actions  69.4  7.3%
+history_obs      96.9  10.2%
+overhead         45.7  4.8%
+input total 954.3, output total 250.0
+turn 0 n 330 mean input 360
+turn 1 n 314 mean input 504
+turn 2 n 65 mean input 586
+obs tokens mean 73.3 median 29.0 p90 184 max 625, >200: 39
+[('completed', 278), ('action_limit', 33), ('invalid_action', 19)]
+turns dist Counter({2: 249, 3: 65, 1: 16})
+0 [(0, 330)]
+1 [(0, 314)]
+2 [(0, 65)]

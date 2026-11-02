@@ -1,0 +1,7 @@
+# 主程序（Python 3.11 及以上）
+pymysql>=1.1
+cryptography>=42
+pyarrow>=15
+tokenizers>=0.19
+numpy>=1.26
+pytest>=8

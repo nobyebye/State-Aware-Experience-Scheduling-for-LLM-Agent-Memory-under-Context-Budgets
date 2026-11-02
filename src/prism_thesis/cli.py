@@ -1,0 +1,510 @@
+"""命令行入口：python -m prism_thesis <命令> ...
+
+  check-data      检查题目划分与数量（不需要 MySQL）
+  verify-env      在 MySQL 中执行每道题的参考 SQL，检查判分器判为成功（不调用模型）
+  show-prompt     打印某道题在某个条件下第一轮发送的消息
+  dry-run         用脚本化智能体跑完整流程（不调用模型、不产生费用）
+  run             正式运行（调用模型，必须加 --allow-paid）
+  build-memory    由构建集与开发集上 nomem 条件的运行记录构建经验记忆库（不调用模型）
+  distill-insights 离线提炼洞见（ExpeL 式，调用模型，必须加 --allow-paid；--rehearsal 用脚本化回复）
+  show-memory     打印某道题检索到的经验（同组排除后）
+  memory-stats    经验条目被发送的次数与所在运行的成功率（记忆演化的扩展分析）
+  risk-estimate   由消融运行记录估计风险表
+  calibrate       在校准集记录上做固定顺序非劣检验，确定 ε*
+  compare         各条件相对完整提示的成功率差与 token 节省（组 bootstrap）
+  token-audit     核对本地 token 计数与服务商返回的 prompt_tokens
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from dataclasses import asdict
+import sys
+from pathlib import Path
+
+from . import stats
+from .checks import REHEARSAL_BANNER, check_records
+from .agent import build_messages, task_features
+from .config import ROOT, load_config, make_policy, make_retriever, memory_path, memory_settings
+from .data import load_tasks
+from .env import MySQLServer, TaskSession
+from .evaluate import match_direct
+from .features import phase, task_type
+from .memory import MemoryStore
+from .memory import build as mbuild
+from .memory.store import Experience
+from .policies.base import TurnState
+from .prism.risk import estimate, single_only_records
+from .runner import ExperimentMismatch, exit_code, load_records, run_experiment
+from .tokens import TokenCounter
+
+SPLITS = {'dev': 'development', 'development': 'development', 'construction': 'construction',
+          'calib': 'construction', 'test': 'test', 'all': None, 'memory': ('construction', 'development')}
+MEMORY_SPLITS = ('construction', 'development')
+EXPECTED = {'development': (110, 67), 'construction': (272, 242), 'test': (114, 100)}
+
+
+def _load_split(split):
+    if isinstance(split, tuple):
+        return sorted((t for s in split for t in load_tasks(s)), key=lambda t: t.task_id)
+    return load_tasks(split)
+
+
+def _tasks(args):
+    tasks = _load_split(SPLITS[args.split])
+    if getattr(args, 'task_ids', None):
+        wanted = {int(x) for x in args.task_ids.split(',')}
+        tasks = [t for t in tasks if t.task_id in wanted]
+    if getattr(args, 'limit', None):
+        tasks = tasks[:args.limit]
+    return tasks
+
+
+def _groups() -> dict[int, str]:
+    return {t.task_id: t.group_id for t in load_tasks(include_excluded=True)}
+
+
+def cmd_check_data(args, cfg):
+    ok = True
+    all_ids = set()
+    for split, (n, g) in EXPECTED.items():
+        ts = load_tasks(split)
+        groups = {t.group_id for t in ts}
+        all_ids |= groups
+        good = (len(ts), len(groups)) == (n, g)
+        ok &= good
+        print(f'{split:13s} 题目 {len(ts):4d}  题目组 {len(groups):4d}  期望 {n}/{g}  {"通过" if good else "不符"}')
+    per_split = {s: {t.group_id for t in load_tasks(s)} for s in EXPECTED}
+    overlap = any(per_split[a] & per_split[b] for a in per_split for b in per_split if a < b)
+    print('划分之间题目组无重叠：' + ('是' if not overlap else '否'))
+    return 0 if ok and not overlap else 1
+
+
+def cmd_verify_env(args, cfg):
+    m = cfg['mysql']
+    split = SPLITS[args.split]
+    tasks = [t for t in load_tasks(include_excluded=True) if split is None or t.split in (split if isinstance(split, tuple) else (split,))]
+    bad = []
+    with MySQLServer(m['image'], m['host'], m['base_port'], m['user'], m['password'], m['docker']) as srv:
+        for t in tasks:
+            with TaskSession(srv, t) as s:
+                r = s.execute(t.reference_sql)
+                ok = r.ok and (s.table_md5() == t.answer_md5 if t.answer_md5 else match_direct(r.text, t.answer_direct))
+            if not ok:
+                bad.append(t.task_id)
+    print(f'参考 SQL 判为成功：{len(tasks) - len(bad)}/{len(tasks)}' + (f'；失败题目 {bad}' if bad else ''))
+    return 0 if not bad else 1
+
+
+def cmd_show_prompt(args, cfg):
+    counter = TokenCounter()
+    task = next(t for t in load_tasks(include_excluded=True) if t.task_id == args.task_id)
+    import random
+    policy = make_policy(args.condition, cfg, counter)
+    policy.start(task, task_features(task), random.Random(0))
+    plan = policy.plan(TurnState(0, phase(0, None), None))
+    messages, _ = build_messages(task, plan, [], policy.store)
+    for msg in messages:
+        print(f"--- {msg['role']} ({counter.count(msg['content'])} tokens)\n{msg['content']}")
+    print(f'--- 本轮输入共 {counter.count_messages(messages)} tokens；单元：{sorted(plan.units)}')
+    return 0
+
+
+def cmd_dry_run(args, cfg):
+    from . import scripted
+    out = Path(args.out)
+    if out.exists() and not args.resume:
+        out.unlink()
+    try:
+        state = run_experiment(cfg, _tasks(args), args.conditions.split(','), args.reps, out,
+                               lambda task: scripted.make(args.agent, task), paid=False, workers=args.workers)
+    except (ExperimentMismatch, FileNotFoundError) as e:
+        print(f'拒绝运行：{e}')
+        return 1
+    if exit_code(state):
+        print(f"演练未全部完成：基础设施错误 {state['infra']} 次，未完成 {state['unfinished']} 次，"
+              f"工作线程错误 {state['errors']}")
+        return exit_code(state)
+    recs = load_records([out])
+    by = {}
+    for r in recs:
+        by.setdefault(r['condition'], []).append(r)
+    for c, rs in sorted(by.items()):
+        print(f"{c:28s} 运行 {len(rs):4d}  成功率 {sum(r['success'] for r in rs) / len(rs):.3f}  "
+              f"平均输入 token {sum(r['input_tokens'] for r in rs) / len(rs):.1f}")
+    return 0
+
+
+def cmd_run(args, cfg):
+    if not args.allow_paid:
+        print('正式运行会调用付费接口。确认已获批准后加 --allow-paid 再运行。')
+        return 2
+    from .llm import OpenAICompatibleLLM
+    m = cfg['model']
+    llm = OpenAICompatibleLLM(m['model'], m['api_base'], m['api_key_env'], m['temperature'], m['top_p'],
+                              m['max_tokens'], m['timeout'], m.get('extra_body'))
+    if args.budget_usd is not None:
+        cfg['run']['budget_usd'] = args.budget_usd
+    try:
+        state = run_experiment(cfg, _tasks(args), args.conditions.split(','), args.reps, Path(args.out),
+                               lambda task: llm, paid=True, workers=args.workers)
+    except (ExperimentMismatch, FileNotFoundError) as e:
+        print(f'拒绝运行：{e}')
+        return 1
+    code = exit_code(state)
+    if code == 3:
+        print(f"因费用上限停止，尚有 {state['unfinished']} 次未运行；提高上限后用相同命令续跑")
+    elif code:
+        print(f"运行未全部完成：基础设施错误 {state['infra']} 次，未完成 {state['unfinished']} 次，"
+              f"工作线程错误 {state['errors']}；排除故障后用相同命令续跑")
+    return code
+
+
+def cmd_risk_estimate(args, cfg):
+    try:
+        recs = load_records([Path(p) for p in args.runs])
+    except ExperimentMismatch as e:
+        print(f'拒绝估计：{e}')
+        return 1
+    pairs = cfg['complementary_pairs']
+    if args.single_only:                 # 消融对照：完全不用互补机制，联合消融记录不参与也不要求
+        recs, pairs = single_only_records(recs), []
+    conds = sorted({r['condition'] for r in recs})
+    joints = _required_joints(conds, pairs)
+    required = ['full'] + sorted(({c for c in conds if c != 'full'} | set(joints)))
+    if 'full' not in conds or not _precheck(recs, required, cfg, 'development',
+                                            cfg['reps']['risk_estimate'], args.rehearsal):
+        if 'full' not in conds:
+            print('缺少完整提示（full）的对照记录')
+        return 1
+    tasks = {t.task_id: t for t in load_tasks(include_excluded=True)}
+    type_of = {tid: task_features(t).task_type for tid, t in tasks.items()}
+    table = estimate(recs, _groups(), type_of, b=cfg['stats']['bootstrap'], seed=cfg['stats']['seed'],
+                     min_exposed_groups=cfg['prism']['min_exposed_groups'], pairs=pairs)
+    untested = {k: v['untested'] for k, v in table.meta['interactions'].items() if 'untested' in v}
+    if untested:
+        print(f'互补组交互无法检验的 {len(untested)} 项（两组的单独条目不写入，部署时回退完整提示）：')
+        for k, why in untested.items():
+            print(f'  {k:40s} {why}')
+    missing = sorted(k for k, c in table.meta['coverage'].items()
+                     if '+' not in k.split('|')[0] and c['exposed_groups'] < table.meta['min_exposed_groups'])
+    print(f"覆盖诊断：{len(table.meta['coverage'])} 个条目，暴露题目组少于 {table.meta['min_exposed_groups']} "
+          f"的单组条目 {len(missing)} 个（不写入风险表，部署时回退完整提示）")
+    for k in missing:
+        c = table.meta['coverage'][k]
+        print(f"  {k:40s} 暴露 {c['exposed_runs']}/{c['runs']} 次，{c['exposed_tasks']} 题，{c['exposed_groups']} 组")
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    table.save(out)
+    print(f'风险表 {len(table.entries)} 项，合并组 {table.merged} → {out}')
+    return 0
+
+
+def _required_joints(conds, pairs) -> list[str]:
+    """配置中的互补组在某状态下两组都做了单独消融时，必须有对应的联合消融（任一顺序书写均可）。"""
+    out = []
+    for a, b in pairs:
+        for c in conds:
+            if c.startswith(f'ablate:{a}@'):
+                phase = c.rsplit('@', 1)[1]
+                if f'ablate:{b}@{phase}' in conds and f'ablate:{b}+{a}@{phase}' not in conds:
+                    out.append(f'ablate:{a}+{b}@{phase}')
+    return out
+
+
+def _precheck(recs, conditions, cfg, split, reps, rehearsal) -> bool:
+    problems = check_records(recs, conditions, cfg, split, reps, rehearsal)
+    if rehearsal:
+        print(REHEARSAL_BANNER)
+    if problems:
+        print('输入检查未通过，不给出结论：')
+        for p in problems:
+            print('  - ' + p)
+        return False
+    return True
+
+
+def cmd_calibrate(args, cfg):
+    try:
+        recs = load_records([Path(p) for p in args.runs])
+    except ExperimentMismatch as e:
+        print(f'拒绝校准：{e}')
+        return 1
+    eps = cfg['prism']['epsilons_pp']
+    delta = cfg['stats']['delta_pp'] / 100
+    ordered = [(e, f'prism@{e:g}') for e in eps]
+    if not _precheck(recs, ['full'] + [c for _, c in ordered], cfg, 'construction',
+                     cfg['reps']['calibrate'], args.rehearsal):
+        return 1
+    best, steps = stats.fixed_sequence(recs, ordered, 'full', _groups(), delta,
+                                       b=cfg['stats']['bootstrap'], seed=cfg['stats']['seed'])
+    for s in steps:
+        d = s.diff
+        print(f'ε={s.epsilon:g}  成功率差 {100 * d.estimate:+.2f}pp  95% 区间 [{100 * d.low:+.2f}, {100 * d.high:+.2f}]  '
+              f'{"通过" if s.passed else "未通过"}  （{d.n_tasks} 题 / {d.n_groups} 组）')
+    print(f'ε* = {best:g}' if best is not None else '无候选通过：回退完整提示')
+    return 0
+
+
+def cmd_compare(args, cfg):
+    try:
+        recs = load_records([Path(p) for p in args.runs])
+    except ExperimentMismatch as e:
+        print(f'拒绝比较：{e}')
+        return 1
+    groups = _groups()
+    conds = sorted({r['condition'] for r in recs} - {args.control})
+    if not _precheck(recs, [args.control] + conds, cfg, SPLITS[args.split], cfg['reps'][args.reps_key], args.rehearsal):
+        return 1
+    kw = {'b': cfg['stats']['bootstrap'], 'seed': cfg['stats']['seed'], 'weighting': args.weighting}
+    rows = []
+    base = stats.cluster_bootstrap(stats.per_task_mean(recs, args.control), groups, **kw)
+    print(f'{args.control}: 成功率 {base.estimate:.3f} [{base.low:.3f}, {base.high:.3f}]')
+    for c in conds:
+        d = stats.paired_difference(recs, c, args.control, groups, **kw)
+        s = stats.relative_saving(recs, c, args.control, groups, b=kw['b'], seed=kw['seed'])
+        ok = stats.noninferior(d, cfg['stats']['delta_pp'] / 100)
+        mem = [r.get('memory_tokens', 0) for r in recs if r['condition'] == c and r.get('status') != 'infrastructure_error']
+        rows.append({'condition': c, 'diff': d.as_dict(), 'saving': s.as_dict(), 'noninferior': ok,
+                     'mean_memory_tokens': sum(mem) / len(mem) if mem else 0.0})
+        print(f'{c:28s} 成功率差 {100 * d.estimate:+6.2f}pp [{100 * d.low:+6.2f}, {100 * d.high:+6.2f}]  '
+              f'输入 token 节省 {100 * s.estimate:5.1f}% [{100 * s.low:5.1f}, {100 * s.high:5.1f}]  '
+              f'{"非劣" if ok else "未证明非劣"}  经验 token/题 {rows[-1]["mean_memory_tokens"]:.1f}')
+    if args.json:
+        Path(args.json).write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding='utf-8')
+    return 0
+
+
+def _insight_file(path) -> list[Experience]:
+    data = json.loads(Path(path).read_text(encoding='utf-8'))
+    out = []
+    for e in data['insights']:
+        for k in ('source_tasks', 'source_groups', 'source_splits'):
+            e[k] = tuple(e[k])
+        out.append(Experience(**e))
+    return out
+
+
+def _memory_records(args, cfg):
+    """读取构建记忆库用的记录：只取 nomem 条件；拒绝测试集；正式模式检查覆盖与重复次数。"""
+    recs = load_records([Path(p) for p in args.runs])
+    mbuild.check_sources(recs)
+    others = sorted({r['condition'] for r in recs} - {'nomem'})
+    if others:
+        print(f'忽略非 nomem 条件的记录：{others}（记忆库只由不带记忆的运行构建）')
+    recs = [r for r in recs if r['condition'] == 'nomem']
+    if not args.rehearsal:
+        if not _precheck(recs, ['nomem'], cfg, None, cfg['reps']['memory_build'], False):
+            return None
+        want = {t.task_id for t in _load_split(MEMORY_SPLITS)}
+        have = {r['task_id'] for r in recs}
+        if have != want:
+            print(f'输入检查未通过：nomem 覆盖构建集与开发集 {len(have & want)}/{len(want)} 道题')
+            return None
+    else:
+        print(REHEARSAL_BANNER)
+    return recs
+
+
+def cmd_build_memory(args, cfg):
+    try:
+        recs = _memory_records(args, cfg)
+    except (ExperimentMismatch, ValueError) as e:
+        print(f'拒绝构建：{e}')
+        return 1
+    if recs is None:
+        return 1
+    tasks = {t.task_id: t for t in load_tasks(include_excluded=True)}
+    mcfg = cfg['memory']
+    entries = mbuild.extract_examples(recs, tasks, mcfg.get('max_answer_chars', 300)) + \
+        mbuild.extract_repairs(recs, tasks)
+    if args.insights:
+        entries += _insight_file(args.insights)
+    try:
+        store = MemoryStore(entries, meta={
+            'runs': [{'path': str(p), 'sha256': hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in args.runs],
+            'n_records': len(recs), 'insights': str(args.insights) if args.insights else None,
+            'rehearsal': bool(args.rehearsal), 'splits': sorted({r['split'] for r in recs})})
+    except ValueError as e:
+        print(f'拒绝构建：{e}')
+        return 1
+    out = Path(args.out) if args.out else memory_path(cfg)
+    store.save(out)
+    c = store.counts()
+    print(f"记忆库 {len(store.entries)} 条（成功示例 {c['example']}，修复经验 {c['repair']}，洞见 {c['insight']}）"
+          f"，来自 {len(recs)} 次运行 → {out}")
+    return 0
+
+
+def cmd_distill_insights(args, cfg):
+    if not (args.allow_paid or args.rehearsal):
+        print('提炼洞见会调用付费接口。确认已获批准后加 --allow-paid 再运行（或用 --rehearsal 演练）。')
+        return 2
+    try:
+        recs = _memory_records(args, cfg)
+    except (ExperimentMismatch, ValueError) as e:
+        print(f'拒绝提炼：{e}')
+        return 1
+    if recs is None:
+        return 1
+    icfg = cfg['memory']['insights']
+    tasks = {t.task_id: t for t in load_tasks(include_excluded=True)}
+    batches = mbuild.insight_batches(recs, tasks, icfg['batch_size'])
+    print(f'{len(batches)} 批“失败—成功”对')
+    price, spent, budget = cfg['price_usd_per_mtok'], [0.0], icfg['budget_usd']
+    if args.rehearsal:
+        def chat(messages):
+            return '- Check the result of each operation before answering.\n- Answer in the required format.'
+    else:
+        from .llm import OpenAICompatibleLLM
+        m = cfg['model']
+        llm = OpenAICompatibleLLM(m['model'], m['api_base'], m['api_key_env'], m['temperature'], m['top_p'],
+                                  m['max_tokens'], m['timeout'], m.get('extra_body'))
+        counter = TokenCounter()
+
+        def chat(messages):
+            if spent[0] >= budget:
+                raise RuntimeError(f'达到洞见提炼的费用上限 {budget} 美元')
+            r = llm.chat(messages)
+            p_in = r.prompt_tokens if r.prompt_tokens is not None else counter.count_messages(messages)
+            p_out = r.completion_tokens if r.completion_tokens is not None else counter.count(r.content)
+            spent[0] += (p_in * price['input'] + p_out * price['output']) / 1e6
+            return r.content
+    try:
+        insights = mbuild.distill_insights(batches, chat, icfg['max_rules'])
+    except RuntimeError as e:
+        print(f'停止：{e}')
+        return 3
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({'meta': {'model': None if args.rehearsal else cfg['model']['model'],
+                                        'rehearsal': bool(args.rehearsal), 'n_batches': len(batches),
+                                        'cost_usd_est': spent[0]},
+                               'insights': [asdict(e) for e in insights]}, ensure_ascii=False, indent=1),
+                   encoding='utf-8')
+    print(f'洞见 {len(insights)} 条，估计费用 {spent[0]:.4f} 美元 → {out}')
+    return 0
+
+
+def cmd_show_memory(args, cfg):
+    settings = memory_settings(cfg, args.condition)
+    if settings is None:
+        print('该条件不使用经验记忆')
+        return 1
+    retriever = make_retriever(cfg, settings)
+    task = next(t for t in load_tasks(include_excluded=True) if t.task_id == args.task_id)
+    groups = retriever.static(task, task_type(task.instruction))
+    counter = TokenCounter()
+    print(f'题目 {task.task_id}（组 {task.group_id}）：{task.instruction}')
+    for g, uids in groups.items():
+        for u in uids:
+            e = retriever.store.by_id[u.split(':', 2)[2]]
+            print(f'--- {g} {u}（来源题目 {list(e.source_tasks)}，{counter.count(e.text)} tokens）\n{e.text}')
+    return 0
+
+
+def cmd_memory_stats(args, cfg):
+    recs = load_records([Path(p) for p in args.runs])
+    sent: dict[str, list[int]] = {}
+    for r in recs:
+        if r.get('status') == 'infrastructure_error':
+            continue
+        for u in {u for t in r.get('turns', []) for u in t.get('experiences', [])}:
+            sent.setdefault(u.split(':', 2)[2], []).append(int(r['success']))
+    rows = sorted(({'eid': e, 'sent_runs': len(v), 'success_rate': sum(v) / len(v)} for e, v in sent.items()),
+                  key=lambda d: (-d['sent_runs'], d['eid']))
+    by_kind: dict[str, list] = {}
+    for d in rows:
+        by_kind.setdefault(d['eid'].split('-')[0], []).append(d)
+    for k, ds in sorted(by_kind.items()):
+        n = sum(d['sent_runs'] for d in ds)
+        print(f"{k:4s} 被发送过的条目 {len(ds):4d}  涉及运行 {n:6d}  "
+              f"加权成功率 {sum(d['success_rate'] * d['sent_runs'] for d in ds) / n:.3f}")
+    if args.json:
+        Path(args.json).write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding='utf-8')
+    return 0
+
+
+def cmd_token_audit(args, cfg):
+    recs = load_records([Path(p) for p in args.runs])
+    n = same = 0
+    for r in recs:
+        for t in r.get('turns', []):
+            api = t['api'].get('prompt_tokens')
+            if api is not None:
+                n += 1
+                same += int(api == t['tokens']['input'])
+    print(f'有服务商计数的请求 {n} 次，本地计数完全一致 {same} 次' if n else '记录中没有服务商计数')
+    return 0
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog='prism_thesis')
+    ap.add_argument('--config', default=str(ROOT / 'configs' / 'default.json'))
+    sub = ap.add_subparsers(dest='cmd', required=True)
+
+    sub.add_parser('check-data')
+    p = sub.add_parser('verify-env')
+    p.add_argument('--split', default='all', choices=SPLITS)
+    p = sub.add_parser('show-prompt')
+    p.add_argument('--task-id', type=int, required=True)
+    p.add_argument('--condition', default='full')
+    for name in ('dry-run', 'run'):
+        p = sub.add_parser(name)
+        p.add_argument('--split', default='dev', choices=SPLITS)
+        p.add_argument('--conditions', default='full')
+        p.add_argument('--reps', type=int, default=1)
+        p.add_argument('--limit', type=int)
+        p.add_argument('--task-ids')
+        p.add_argument('--workers', type=int)
+        p.add_argument('--out', required=True)
+        if name == 'dry-run':
+            p.add_argument('--agent', default='gold', choices=['gold', 'gold_after_error'])
+            p.add_argument('--resume', action='store_true')
+        else:
+            p.add_argument('--allow-paid', action='store_true')
+            p.add_argument('--budget-usd', type=float)
+    p = sub.add_parser('risk-estimate')
+    p.add_argument('--runs', nargs='+', required=True)
+    p.add_argument('--out', required=True)
+    p.add_argument('--single-only', action='store_true')
+    p.add_argument('--rehearsal', action='store_true', help='演练：只做一致性检查，结果不得用于冻结或论文')
+    p = sub.add_parser('calibrate')
+    p.add_argument('--runs', nargs='+', required=True)
+    p.add_argument('--rehearsal', action='store_true', help='演练：只做一致性检查，结果不得用于冻结或论文')
+    p = sub.add_parser('compare')
+    p.add_argument('--runs', nargs='+', required=True)
+    p.add_argument('--split', default='test', choices=[k for k in SPLITS if k not in ('all', 'memory')])
+    p.add_argument('--rehearsal', action='store_true', help='演练：只做一致性检查，结果不得用于冻结或论文')
+    p.add_argument('--control', default='full')
+    p.add_argument('--weighting', default='task', choices=['task', 'group'])
+    p.add_argument('--reps-key', default='compare', help='配置 reps 中预定次数表的键（k 敏感性实验用 k_sensitivity）')
+    p.add_argument('--json')
+    for name in ('build-memory', 'distill-insights'):
+        p = sub.add_parser(name)
+        p.add_argument('--runs', nargs='+', required=True, help='构建集与开发集上 nomem 条件的运行记录')
+        p.add_argument('--rehearsal', action='store_true', help='演练：不检查覆盖与模型，结果不得用于正式实验')
+        if name == 'build-memory':
+            p.add_argument('--out', help='默认为配置中的 memory.store')
+            p.add_argument('--insights', help='distill-insights 输出的洞见文件')
+        else:
+            p.add_argument('--out', required=True)
+            p.add_argument('--allow-paid', action='store_true')
+    p = sub.add_parser('show-memory')
+    p.add_argument('--task-id', type=int, required=True)
+    p.add_argument('--condition', default='full')
+    p = sub.add_parser('memory-stats')
+    p.add_argument('--runs', nargs='+', required=True)
+    p.add_argument('--json')
+    p = sub.add_parser('token-audit')
+    p.add_argument('--runs', nargs='+', required=True)
+
+    args = ap.parse_args(argv)
+    cfg = load_config(args.config)
+    fn = globals()['cmd_' + args.cmd.replace('-', '_')]
+    return fn(args, cfg)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

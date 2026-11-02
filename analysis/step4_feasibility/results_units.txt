@@ -1,0 +1,5 @@
+system total 260 | function list 80 | instructions 181
+[(0, 12, "You operate a MySQL database to complete the user'"), (1, 7, 'For a database operation output exactly:'), (2, 3, 'Action: Operation'), (3, 2, '```sql'), (4, 2, 'YOUR_SQL'), (5, 1, '```'), (6, 7, 'For the final answer output exactly:'), (7, 3, 'Action: Answer'), (8, 9, 'Final Answer: YOUR_ANSWER_ON_ONE_LINE'), (9, 13, 'Use actual tool observations. Historical experienc'), (10, 16, 'Use exactly one SQL statement per operation; only '), (11, 19, 'Do not use session variables, file operations, loc'), (12, 20, 'CTEs and set operations are unavailable. Subquerie'), (13, 28, 'For a query, Final Answer must be a literal list o'), (14, 16, 'For an empty query result use []; for a scalar res'), (15, 16, 'Do not claim success without observing the result.')]
+function recall 240/265
+base 954.3 new 671.1 reduction 29.7%
+query-intent tasks 228

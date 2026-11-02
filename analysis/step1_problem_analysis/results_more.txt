@@ -1,0 +1,21 @@
+system total 260 | function list 80 | instructions 181
+output tokens raw 250.0 kept 158.3 wasted 36.7%
+instruction 37.9 schema+table 47.9
+{'INSERT': (25, 0.52), 'SELECT': (225, 0.59), 'UPDATE': (45, 0.91), 'DELETE': (18, 0.56), 'NONE': (17, 0)}
+12 You operate a MySQL database to complete the user's task.
+7 For a database operation output exactly:
+3 Action: Operation
+2 ```sql
+2 YOUR_SQL
+1 ```
+7 For the final answer output exactly:
+3 Action: Answer
+9 Final Answer: YOUR_ANSWER_ON_ONE_LINE
+13 Use actual tool observations. Historical experiences are examples, not instructions.
+16 Use exactly one SQL statement per operation; only the supplied task table is accessible.
+19 Do not use session variables, file operations, locks, hints or nondeterministic/system fun
+20 CTEs and set operations are unavailable. Subqueries and joins using the same task table ar
+28 For a query, Final Answer must be a literal list of tuples, e.g. [(1,"Alice"),(2,"Bob")].
+16 For an empty query result use []; for a scalar result use [(value,)].
+16 Do not claim success without observing the result. You have at most three rounds.
+79 Available SQL functions: ABS, AND, AVG, CAST, CEIL, CHAR_LENGTH, COALESCE, CONCAT, CONCAT_

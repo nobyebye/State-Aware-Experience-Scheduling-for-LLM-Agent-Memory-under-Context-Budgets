@@ -1,0 +1,3 @@
+system total 260 | function list 80 | instructions 181
+repeated share of input 45.7%
+Counter({'wrong_answer': 73, 'action_limit': 33, 'invalid_action': 19, 'sql_error_seen': 8})
