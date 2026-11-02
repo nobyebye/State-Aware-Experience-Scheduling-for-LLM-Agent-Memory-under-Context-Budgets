@@ -31,10 +31,11 @@ ACTION_UNITS = [
     Unit('role', 'core', "You are an agent that operates a MySQL database to complete the user's task. "
          'In every response, output exactly one action: either a database operation or the final answer.',
          core=True),
-    Unit('op_format', 'core', 'To operate the database, output exactly:\n'
+    Unit('op_format', 'core', 'To operate the database, output exactly the following; the first line is always '
+         'the literal text "Action: Operation", and the SQL must be inside the ```sql code block:\n'
          'Action: Operation\n```sql\nYOUR_SQL\n```\n'
          'The SQL will be executed and you will receive the raw MySQL result.', core=True),
-    Unit('answer_action', 'core', 'When you are done, output exactly:\n'
+    Unit('answer_action', 'core', 'When you are done, output exactly (the first line is always "Action: Answer"):\n'
          'Action: Answer\nFinal Answer: YOUR_ANSWER_ON_ONE_LINE', core=True),
 ]
 

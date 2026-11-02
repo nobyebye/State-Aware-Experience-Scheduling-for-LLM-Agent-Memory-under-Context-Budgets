@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from dataclasses import asdict
 import sys
 from pathlib import Path
@@ -443,6 +444,33 @@ def cmd_token_audit(args, cfg):
     return 0
 
 
+def cmd_reparse(args, cfg):
+    """离线复查：用当前解析规则重新解析记录中每条回复的原始文本，统计动作格式。不调用模型、不花钱。
+    对比记录中的解析结果与当前规则的结果；操作是否执行成功不在此列（需重跑）。"""
+    from collections import Counter
+    from .parser import first_action, parse
+    recs = [r for r in load_records([Path(p) for p in args.runs]) if r.get('status') != 'infrastructure_error']
+    old, new, label, examples = Counter(), Counter(), Counter(), []
+    for r in recs:
+        for t in r.get('turns', []):
+            raw = t.get('raw_response') or ''
+            p_new = parse(first_action(raw))
+            old[t.get('action') if t.get('action') != 'invalid' else f"invalid:{t.get('parse_reason')}"] += 1
+            new[p_new.kind if p_new.kind != 'invalid' else f'invalid:{p_new.reason}'] += 1
+            m = re.search(r'Action:[ \t]*([^\n]*)', raw)
+            label[(m.group(1).strip()[:20] if m else None, '```' in raw)] += 1
+            if p_new.kind == 'invalid' and len(examples) < args.examples:
+                examples.append(raw[:400])
+    print(f'有效记录 {len(recs)} 条，回复 {sum(old.values())} 条')
+    print('记录中的解析结果：', dict(old.most_common()))
+    print('当前规则的解析结果：', dict(new.most_common()))
+    print('首个 Action 标签与是否含代码块：', label.most_common(12))
+    for e in examples:
+        print('--- 仍无效的回复示例 ---')
+        print(e)
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog='prism_thesis')
     ap.add_argument('--config', default=str(ROOT / 'configs' / 'default.json'))
@@ -501,6 +529,9 @@ def main(argv=None) -> int:
     p = sub.add_parser('memory-stats')
     p.add_argument('--runs', nargs='+', required=True)
     p.add_argument('--json')
+    p = sub.add_parser('reparse', help='离线用当前解析规则重新解析记录中的原始回复（不花钱）')
+    p.add_argument('--runs', nargs='+', required=True)
+    p.add_argument('--examples', type=int, default=5)
     p = sub.add_parser('token-audit')
     p.add_argument('--runs', nargs='+', required=True)
 

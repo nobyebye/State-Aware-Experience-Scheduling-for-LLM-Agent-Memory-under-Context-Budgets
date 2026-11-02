@@ -123,6 +123,7 @@ python -m prism_thesis run --split memory --conditions nomem --reps 2 --out resu
 | 消融（开发集） | `prism-stateless@ε`、`prism-nosig@ε`、`prism-norecovery@ε`、`prism-singleonly@ε`、`prism-tailsys@ε`、`prism-greedy@ε` |
 | 检索条数 k 的敏感性（开发集，3 次/题） | `run --split dev --conditions full#k=1,prism@<ε>#k=1,full#k=3,prism@<ε>#k=3,full#k=5,prism@<ε>#k=5 --reps 3`，再对每个 k 分别 `compare --split dev --reps-key k_sensitivity --control full#k=<k>`（输入只含该 k 的两个条件） |
 | 计数核对 | `token-audit` |
+| 动作格式离线复查（不调用模型，用当前解析规则重新解析已有记录的原始回复） | `reparse --runs <结果文件>` |
 
 使用记忆的条件，其实验指纹包含记忆库内容与检索设置：重建记忆库后须换新的输出路径。`nomem` 不依赖记忆库，
 修改记忆库构建代码（`memory/build.py`）也不会使已完成的 `nomem` 运行失效。
@@ -132,5 +133,7 @@ python -m prism_thesis run --split memory --conditions nomem --reps 2 --out resu
 1. 系统指令为本研究重新编写（官方提示文件未能取得），动作格式与官方解析规则一致；唯一差别是 SQL 代码块内部的换行原样保留
    （官方替换为空格，会让 `-- ` 与 `#` 行注释吞掉下一行，例如 WHERE 条件）；
 2. 每次操作只允许一条 SQL 语句；智能体账号只有本题数据库的增删改查权限；单条语句执行上限 10 秒；
-3. 只保留模型回复中的第一个完整动作（Llama-3.1-8B 常在操作后自行编造结果）；
+3. 只保留模型回复中的第一个完整动作（Llama-3.1-8B 常在操作后自行编造结果）；官方解析判为无效、但第一个动作标签写成 SQL 动词
+   （如 `Action: Query`、`Action: Update`）且后跟 ```sql 代码块的回复，统一改写为 `Action: Operation` 加该代码块
+   （预实验中约四分之三的首轮回复属于这种情况）；没有代码块的回复仍判为无效动作；
 4. 修改题以结束时的表哈希判分（官方在作答与无效动作两种结束方式下也如此），查询题须给出 Final Answer。
