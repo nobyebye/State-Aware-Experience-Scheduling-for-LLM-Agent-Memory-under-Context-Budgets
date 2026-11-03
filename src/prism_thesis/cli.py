@@ -444,6 +444,44 @@ def cmd_token_audit(args, cfg):
     return 0
 
 
+def cmd_show_runs(args, cfg):
+    """离线查看运行记录：每局每轮模型做了什么、数据库返回了什么，以及几项诊断计数。不调用模型、不花钱。"""
+    from collections import Counter
+    tasks = {t.task_id: t for t in load_tasks(include_excluded=True)}
+    recs = [r for r in load_records([Path(p) for p in args.runs]) if r.get('status') != 'infrastructure_error']
+    recs.sort(key=lambda r: (r.get('condition', ''), r.get('task_id', 0), r.get('rep', 0)))
+    status, diag = Counter(), Counter()
+    for r in recs:
+        t = tasks.get(r.get('task_id'))
+        kind = '查询' if t is not None and t.is_query else '修改'
+        status[(kind, r['status'], 'OK' if r['success'] else 'FAIL')] += 1
+        ops = [x.get('content') or '' for x in r.get('turns', []) if x.get('action') == 'operation']
+        if kind == '查询' and any(re.match(r'\s*(INSERT|UPDATE|DELETE|REPLACE)\b', o, re.I) for o in ops):
+            diag['查询题中执行了修改语句'] += 1
+        if kind == '查询' and r['status'] == 'answered' and (r.get('answer') or '').strip().lower() in ('done', '[]', '[()]'):
+            diag['查询题答案为 done/[]/[()]'] += 1
+        if any((x.get('exec') or {}).get('ok') is False for x in r.get('turns', [])):
+            diag['出现过 SQL 错误'] += 1
+        if args.brief:
+            continue
+        print(f"===== {r.get('condition')} 题 {r.get('task_id')} 第 {r.get('rep')} 次 [{kind}] {r['status']} "
+              f"{'OK' if r['success'] else 'FAIL'}")
+        if args.instructions and t is not None:
+            print('  题目:', t.instruction[:args.width])
+        for x in r.get('turns', []):
+            print('  >>', (x.get('content') or x.get('response') or '')[:args.width].replace('\n', ' '))
+            if 'observation' in x:
+                print('  <<', x['observation'][:args.width].replace('\n', ' '))
+    n = len(recs)
+    ok = sum(int(r['success']) for r in recs)
+    print(f'\n共 {n} 局，成功 {ok}（{ok / n:.1%}）' if n else '没有记录')
+    for k, v in sorted(status.items()):
+        print(f'  {k[0]} {k[1]:15s} {k[2]:4s} {v}')
+    for k, v in diag.items():
+        print(f'  {k}: {v}')
+    return 0
+
+
 def cmd_reparse(args, cfg):
     """离线复查：用当前解析规则重新解析记录中每条回复的原始文本，统计动作格式。不调用模型、不花钱。
     对比记录中的解析结果与当前规则的结果；操作是否执行成功不在此列（需重跑）。"""
@@ -529,6 +567,11 @@ def main(argv=None) -> int:
     p = sub.add_parser('memory-stats')
     p.add_argument('--runs', nargs='+', required=True)
     p.add_argument('--json')
+    p = sub.add_parser('show-runs', help='离线查看运行记录的每一轮与诊断计数（不花钱）')
+    p.add_argument('--runs', nargs='+', required=True)
+    p.add_argument('--brief', action='store_true', help='只打印汇总')
+    p.add_argument('--instructions', action='store_true', help='同时打印题目')
+    p.add_argument('--width', type=int, default=200)
     p = sub.add_parser('reparse', help='离线用当前解析规则重新解析记录中的原始回复（不花钱）')
     p.add_argument('--runs', nargs='+', required=True)
     p.add_argument('--examples', type=int, default=5)

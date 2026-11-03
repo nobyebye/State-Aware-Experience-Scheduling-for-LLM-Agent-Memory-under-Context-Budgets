@@ -75,6 +75,7 @@ def experiment_fingerprint(cfg: dict, condition: str, paid: bool = True) -> str:
     """影响该条件运行结果的全部设置的哈希（不含线程数、费用上限、数据库地址等运行参数）。"""
     parts = {
         'model': cfg['model'], 'agent': cfg['agent'], 'prompt_variant': cfg.get('prompt_variant', 'standard'),
+        'prompt_overrides': cfg.get('prompt_overrides') or {}, 'schema_style': cfg.get('schema_style', 'official'),
         'code': experiment_code_hash(), 'mode': 'paid' if paid else 'unpaid', 'mysql_image': cfg['mysql']['image'],
         'run_seed': cfg['run']['seed'],
         'data': {f: _sha((ROOT / 'data' / f).read_bytes()) for f in ('db_bench.parquet', 'splits.json')},

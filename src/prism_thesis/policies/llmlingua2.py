@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from ..memory.store import render_memory
 from ..prompts import ALL_IDS, render_system
+from ..prompts import schema_text as prompt_schema_text
 from .base import Plan, Policy, TurnState
 
 
@@ -31,7 +32,7 @@ class LLMLingua2Policy(Policy):
         units = self.full_units()
         memory = render_memory(units, self.store)
         self.fixed = Plan(prefix=units, system_text=self._compress(render_system(ALL_IDS, task)),
-                          schema_text=self._compress(task.schema_text),
+                          schema_text=self._compress(prompt_schema_text(task)),
                           memory_text=self._compress(memory) if memory else None)
 
     def plan(self, state: TurnState) -> Plan:

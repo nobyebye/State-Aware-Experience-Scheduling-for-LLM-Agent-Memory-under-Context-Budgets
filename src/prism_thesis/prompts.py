@@ -106,6 +106,26 @@ def set_variant(variant: str) -> None:
         raise ValueError(variant)
     _variant = variant
 
+
+SCHEMA_STYLES = ('official', 'typed', 'legacy')
+_overrides: dict[str, str] = {}
+_schema_style = 'official'
+
+
+def set_prompt_options(overrides: dict | None = None, schema_style: str = 'official') -> None:
+    """配置中的提示调试选项（在程序启动时设置一次）：
+    overrides     单元 id → 替换文本，用于对比不同措辞（只允许替换已有的非函数、非任务单元）；
+    schema_style  official：官方表信息句（表名与列名）；typed：表名与带类型的列；
+                  legacy：预实验的写法（Schema: {列名: 类型} 换行 Table: 表名）。"""
+    global _overrides, _schema_style
+    overrides = dict(overrides or {})
+    bad = [u for u in overrides if u not in UNIT_BY_ID or u in FUNCTION_IDS or u in ('task', 'schema')]
+    if bad:
+        raise ValueError(f'prompt_overrides 中的单元不可替换：{bad}')
+    if schema_style not in SCHEMA_STYLES:
+        raise ValueError(schema_style)
+    _overrides, _schema_style = overrides, schema_style
+
 SCHEMA_UNIT = Unit('schema', 'schema', '', kind='schema')   # 文本随题目变化，见 unit_text
 TASK_UNIT = Unit('task', 'task', '', core=True, kind='task')
 
@@ -121,9 +141,21 @@ SELECTABLE_GROUPS = ('observe', 'one_stmt', 'scope', 'answer_query', 'empty_scal
                      'rounds', 'fn_predicted', 'fn_other', 'schema')
 
 
+def schema_text(task: Task) -> str:
+    if _schema_style == 'typed':
+        cols = ', '.join(f'{c.name} {c.type}' for c in task.columns)
+        return f'The name of this table is {task.table}, and its columns are: {cols}.'
+    if _schema_style == 'legacy':
+        cols = {c.name: c.type for c in sorted(task.columns, key=lambda c: c.name)}
+        return f'Schema: {cols}\nTable: {task.table}'
+    return task.schema_text
+
+
 def unit_text(uid: str, task: Task) -> str:
     if uid == 'schema':
-        return task.schema_text
+        return schema_text(task)
+    if uid in _overrides:
+        return _overrides[uid]
     if uid == 'task':
         return task.instruction
     if uid in FUNCTION_IDS and _variant == 'extended':
@@ -170,5 +202,5 @@ def render_system(unit_ids: Iterable[str], task: Task) -> str:
 def render_first_user(unit_ids: Iterable[str], task: Task) -> str:
     """第一条用户消息：任务指令；表信息句被选中时按官方格式换行附在其后。"""
     if 'schema' in set(unit_ids):
-        return task.official_prompt
+        return f'{task.instruction}\n{schema_text(task)}'
     return task.instruction

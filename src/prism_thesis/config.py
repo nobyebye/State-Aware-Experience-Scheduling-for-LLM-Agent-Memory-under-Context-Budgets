@@ -25,7 +25,7 @@ from .memory import MemoryStore, Retriever
 from .policies import (AblationPolicy, FullPolicy, PhaseSwitchPolicy, PrismPolicy, RandomDropPolicy,
                        StaticPolicy)
 from .prism.risk import RiskTable, parse_ablation
-from .prompts import set_variant
+from .prompts import set_prompt_options, set_variant
 from .tokens import TokenCounter
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def load_config(path: str | Path = ROOT / 'configs' / 'default.json') -> dict:
     cfg = json.loads(Path(path).read_text(encoding='utf-8'))
     set_variant(cfg.get('prompt_variant', 'standard'))
+    set_prompt_options(cfg.get('prompt_overrides'), cfg.get('schema_style', 'official'))
     return cfg
 
 
