@@ -124,6 +124,7 @@ python -m prism_thesis run --split memory --conditions nomem --reps 2 --out resu
 | 检索条数 k 的敏感性（开发集，3 次/题） | `run --split dev --conditions full#k=1,prism@<ε>#k=1,full#k=3,prism@<ε>#k=3,full#k=5,prism@<ε>#k=5 --reps 3`，再对每个 k 分别 `compare --split dev --reps-key k_sensitivity --control full#k=<k>`（输入只含该 k 的两个条件） |
 | 计数核对 | `token-audit` |
 | 动作格式离线复查（不调用模型，用当前解析规则重新解析已有记录的原始回复） | `reparse --runs <结果文件>` |
+| 解析与判分一致性检查（把已有轨迹重放到本环境重新判分，需 Docker） | `python scripts/replay_runs.py <轨迹文件>` |
 | 离线查看每局每轮的回复、数据库返回与诊断计数 | `show-runs --runs <结果文件> [--brief] [--instructions]` |
 | 提示措辞对照（调试用，不用于正式实验） | 配置项 `prompt_overrides`（单元 id → 文本）与 `schema_style`（official / typed / legacy），示例见 `configs/probe/`；两者都计入实验指纹 |
 

@@ -58,8 +58,13 @@ _FINAL_LINE = re.compile(r'^Final Answer:[^\r\n]*', re.MULTILINE)
 
 
 def first_action(response: str) -> str:
-    """单动作规范化。官方解析已合规的回复只做截断，保证 parse(first_action(x)) == parse(x)；
-    官方解析无效的回复才尝试统一操作标签。"""
+    """单动作规范化，以回复中第一个动作行为准。
+    第一个动作行的标签不是 Operation/Answer（如 "Action: Query"）时直接按该动作改写：
+    官方规则会跳过这种标签，去取后面模型自行编造的 "Action: Answer"，把猜测的答案当成最终答案。
+    第一个动作行是 Operation/Answer 时与官方解析一致（只做截断）；官方解析无效时再尝试改写。"""
+    first = _ACTION_LINE.search(response)
+    if first is not None and first.group(1).strip() not in ('Operation', 'Answer'):
+        return _relabel(response)
     cut = _truncate(response)
     if parse(cut).kind != 'invalid':
         return cut

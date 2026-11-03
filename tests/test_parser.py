@@ -1,4 +1,5 @@
 import random
+import re
 
 from prism_thesis.parser import Parsed, first_action, parse
 
@@ -26,7 +27,9 @@ def test_first_action_preserves_parse():
     for _ in range(20000):
         s = ''.join(rng.choice(pieces) for _ in range(rng.randint(0, 9)))
         before, after = parse(s), parse(first_action(s))
-        if before.kind != 'invalid':          # 官方已合规的回复：规范化不改变解析结果
+        first = re.search(r'^Action:[ \t]*([^\r\n]*)$', s, re.MULTILINE)
+        led_by_official = first is None or first.group(1).strip() in ('Operation', 'Answer')
+        if before.kind != 'invalid' and led_by_official:   # 第一个动作合规的回复：规范化不改变解析结果
             assert after == before, s
         assert parse(first_action(first_action(s))) == after, s
 
@@ -105,3 +108,12 @@ def test_reparse_command(tmp_path, capsys):
     assert main(['reparse', '--runs', str(f)]) == 0
     out = capsys.readouterr().out
     assert "'operation': 1" in out and "'invalid:no_sql_block': 1" in out
+
+
+def test_guessed_answer_after_verb_label_is_not_taken():
+    """官方规则会跳过 "Action: Query"，取后面编造的 "Action: Answer"；这里以第一个动作为准，先执行 SQL。"""
+    text = ("Action: Query\n```sql\nSELECT a FROM t;\n```\nAction: Answer\nFinal Answer: [(guess,)]")
+    assert parse(text).kind == 'answer'
+    assert parse(first_action(text)) == Parsed('operation', 'SELECT a FROM t;')
+    text = "Action: Update\n```sql\nUPDATE t SET a=1;\n```\nAction: Answer\nFinal Answer: [(2500,)]"
+    assert parse(first_action(text)) == Parsed('operation', 'UPDATE t SET a=1;')
