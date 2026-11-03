@@ -135,7 +135,8 @@ class MySQLServer:
     def start(self, timeout: float = 180) -> None:
         if self.docker:
             subprocess.run(['docker', 'rm', '-f', self.name], capture_output=True)
-            subprocess.run(['docker', 'run', '-d', '--rm', '--name', self.name,
+            # 不用 --rm：容器启动失败退出时保留下来，才能读到它的日志；stop() 负责删除
+            subprocess.run(['docker', 'run', '-d', '--name', self.name,
                             '-e', f'MYSQL_ROOT_PASSWORD={self.password}',
                             '-p', f'{self.host}:{self.port}:3306', self.image],
                            check=True, capture_output=True)
@@ -145,9 +146,21 @@ class MySQLServer:
                 self.connect().close()
                 return
             except pymysql.MySQLError:
+                if self.docker and not self._running():
+                    raise RuntimeError(f'MySQL 容器 {self.name} 启动后退出：\n{self._logs()}')
                 if time.time() > deadline:
-                    raise TimeoutError(f'MySQL at {self.host}:{self.port} not ready after {timeout}s')
+                    detail = f'\n容器日志最后几行：\n{self._logs()}' if self.docker else ''
+                    raise TimeoutError(f'MySQL at {self.host}:{self.port} not ready after {timeout}s{detail}')
                 time.sleep(2)
+
+    def _running(self) -> bool:
+        out = subprocess.run(['docker', 'inspect', '-f', '{{.State.Running}}', self.name],
+                             capture_output=True, text=True)
+        return out.stdout.strip() == 'true'
+
+    def _logs(self, n: int = 15) -> str:
+        out = subprocess.run(['docker', 'logs', '--tail', str(n), self.name], capture_output=True, text=True)
+        return (out.stdout + out.stderr).strip() or '（无日志）'
 
     def stop(self) -> None:
         if self.docker:
