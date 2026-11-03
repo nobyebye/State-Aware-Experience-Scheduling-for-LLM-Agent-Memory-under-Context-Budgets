@@ -47,14 +47,14 @@ RULE_UNITS = [
     Unit('one_stmt', 'one_stmt', 'Write exactly one SQL statement per operation.'),
     Unit('scope', 'scope', 'Only the given table is accessible. You may read and modify its rows, '
          'but do not create, drop or alter tables or databases.'),
-    Unit('answer_query', 'answer_query', 'For a question about the data, the Final Answer must be the '
-         'result rows as a list of tuples on one line, with values exactly as returned by MySQL, '
-         "e.g. [(1, 'Alice'), (2, 'Bob')]."),
+    Unit('answer_query', 'answer_query', 'If the task asks a question about the data, run a SELECT and give the '
+         'Final Answer as the result rows: a list of tuples on one line, with values exactly as returned by MySQL, '
+         "e.g. [(1, 'Alice'), (2, 'Bob')]. Never insert, update or delete rows for such a task."),
     Unit('empty_scalar', 'empty_scalar', 'If the result is empty, answer []. '
          'If the result is a single value, answer [(value,)].'),
-    Unit('modify_answer', 'modify_answer', 'For a task that inserts, updates or deletes rows, first execute '
-         'the modification; the table is checked afterwards, so the Final Answer can be a short '
-         'confirmation such as done.'),
+    Unit('modify_answer', 'modify_answer', 'Only if the task itself asks to insert, update or delete rows: '
+         'execute exactly that modification; the table is checked afterwards, so the Final Answer can then be a '
+         'short confirmation such as done.'),
     Unit('rounds', 'rounds', 'You have at most three responses in total.'),
 ]
 
