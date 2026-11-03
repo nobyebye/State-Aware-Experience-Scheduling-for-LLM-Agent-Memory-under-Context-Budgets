@@ -254,6 +254,7 @@ def run_experiment(cfg: dict, tasks: list[Task], conditions: list[str], reps: in
     for j in jobs:
         q.put(j)
     lock = threading.Lock()
+    start_lock = threading.Lock()   # MySQL 容器逐个初始化：同时初始化多个时，慢磁盘上可能都超时
     version = code_version()
 
     def cost_of(p_in: int, p_out: int) -> float:
@@ -263,7 +264,8 @@ def run_experiment(cfg: dict, tasks: list[Task], conditions: list[str], reps: in
         server = MySQLServer(image=mcfg['image'], host=mcfg['host'], port=mcfg['base_port'] + idx,
                              user=mcfg['user'], password=mcfg['password'], docker=mcfg['docker'])
         try:
-            server.start()
+            with start_lock:
+                server.start(timeout=float(mcfg.get('start_timeout_s', 600)))
             policies: dict = {}
             while not state['stopped']:
                 try:

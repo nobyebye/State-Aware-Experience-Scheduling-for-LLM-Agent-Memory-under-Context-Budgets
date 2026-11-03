@@ -132,7 +132,7 @@ class MySQLServer:
         self.password = password if password is not None else secrets.token_hex(8)
         self.name = name or f'prism-mysql-{port}'
 
-    def start(self, timeout: float = 180) -> None:
+    def start(self, timeout: float = 600) -> None:
         if self.docker:
             subprocess.run(['docker', 'rm', '-f', self.name], capture_output=True)
             # 不用 --rm：容器启动失败退出时保留下来，才能读到它的日志；stop() 负责删除

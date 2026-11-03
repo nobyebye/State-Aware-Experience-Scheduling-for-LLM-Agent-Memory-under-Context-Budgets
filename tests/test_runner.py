@@ -23,7 +23,7 @@ class FakeServer:
     def __init__(self, **kw):
         pass
 
-    def start(self):
+    def start(self, timeout=None):
         if FakeServer.fail:
             raise RuntimeError('docker not running')
 
