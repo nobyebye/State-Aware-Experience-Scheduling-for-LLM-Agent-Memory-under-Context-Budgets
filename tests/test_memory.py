@@ -415,3 +415,21 @@ def test_cli_build_memory_rehearsal_and_test_refusal(tmp_path, capsys):
     assert cli.main(['--config', str(cfg_path), 'build-memory', '--runs', str(runs), '--out', str(out),
                      '--rehearsal']) == 1
     assert '测试集' in capsys.readouterr().out
+
+
+def test_distill_retries_rate_limits_only():
+    from prism_thesis.llm import LLMError
+    calls, waits = [], []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise LLMError("HTTP 429: b'temporarily rate-limited upstream'")
+        return 'ok'
+    assert cli.retry_rate_limited(flaky, 5, 60, sleep=waits.append) == 'ok' and waits == [60, 60]
+    with pytest.raises(LLMError):
+        cli.retry_rate_limited(lambda: (_ for _ in ()).throw(LLMError('HTTP 400: bad')), 5, 60, sleep=waits.append)
+    assert waits == [60, 60]
+    calls.clear()
+    with pytest.raises(LLMError):
+        cli.retry_rate_limited(flaky, 1, 1, sleep=waits.append)

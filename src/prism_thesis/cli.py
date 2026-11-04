@@ -22,6 +22,7 @@ import json
 import re
 from dataclasses import asdict
 import sys
+import time
 from pathlib import Path
 
 from . import stats
@@ -342,6 +343,20 @@ def cmd_build_memory(args, cfg):
     return 0
 
 
+def retry_rate_limited(call, retries: int, wait: float, sleep=time.sleep):
+    """服务商临时限流（HTTP 429）时等待后重试；llm.py 内部的短重试用完后，在这里再等 retries × wait 秒。
+    其他错误直接抛出。"""
+    from .llm import LLMError
+    for attempt in range(retries + 1):
+        try:
+            return call()
+        except LLMError as e:
+            if 'HTTP 429' not in str(e) or attempt == retries:
+                raise
+            print(f'服务商限流，{wait:g} 秒后重试（第 {attempt + 1} 次）', flush=True)
+            sleep(wait)
+
+
 def cmd_distill_insights(args, cfg):
     if not (args.allow_paid or args.rehearsal):
         print('提炼洞见会调用付费接口。确认已获批准后加 --allow-paid 再运行（或用 --rehearsal 演练）。')
@@ -368,10 +383,15 @@ def cmd_distill_insights(args, cfg):
                                   m['max_tokens'], m['timeout'], m.get('extra_body'))
         counter = TokenCounter()
 
+        from .llm import LLMError
+
         def chat(messages):
             if spent[0] >= budget:
                 raise RuntimeError(f'达到洞见提炼的费用上限 {budget} 美元')
-            r = llm.chat(messages)
+            try:
+                r = retry_rate_limited(lambda: llm.chat(messages), args.rate_limit_retries, args.rate_limit_wait)
+            except LLMError as e:
+                raise RuntimeError(str(e)) from e
             p_in = r.prompt_tokens if r.prompt_tokens is not None else counter.count_messages(messages)
             p_out = r.completion_tokens if r.completion_tokens is not None else counter.count(r.content)
             spent[0] += (p_in * price['input'] + p_out * price['output']) / 1e6
@@ -561,6 +581,8 @@ def main(argv=None) -> int:
         else:
             p.add_argument('--out', required=True)
             p.add_argument('--allow-paid', action='store_true')
+            p.add_argument('--rate-limit-retries', type=int, default=10)
+            p.add_argument('--rate-limit-wait', type=float, default=60)
     p = sub.add_parser('show-memory')
     p.add_argument('--task-id', type=int, required=True)
     p.add_argument('--condition', default='full')
