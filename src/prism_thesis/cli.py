@@ -379,8 +379,11 @@ def cmd_distill_insights(args, cfg):
     else:
         from .llm import OpenAICompatibleLLM
         m = cfg['model']
+        # --any-provider：只在提炼洞见时放开服务商固定（同一模型），避免一家服务商临时限流卡住流程；洞见文件记录此选项
+        extra = {k: v for k, v in (m.get('extra_body') or {}).items() if k != 'provider'} if args.any_provider \
+            else m.get('extra_body')
         llm = OpenAICompatibleLLM(m['model'], m['api_base'], m['api_key_env'], m['temperature'], m['top_p'],
-                                  m['max_tokens'], m['timeout'], m.get('extra_body'))
+                                  m['max_tokens'], m['timeout'], extra)
         counter = TokenCounter()
 
         from .llm import LLMError
@@ -405,7 +408,7 @@ def cmd_distill_insights(args, cfg):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({'meta': {'model': None if args.rehearsal else cfg['model']['model'],
                                         'rehearsal': bool(args.rehearsal), 'n_batches': len(batches),
-                                        'cost_usd_est': spent[0]},
+                                        'cost_usd_est': spent[0], 'any_provider': bool(getattr(args, 'any_provider', False))},
                                'insights': [asdict(e) for e in insights]}, ensure_ascii=False, indent=1),
                    encoding='utf-8')
     print(f'洞见 {len(insights)} 条，估计费用 {spent[0]:.4f} 美元 → {out}')
@@ -583,6 +586,8 @@ def main(argv=None) -> int:
             p.add_argument('--allow-paid', action='store_true')
             p.add_argument('--rate-limit-retries', type=int, default=10)
             p.add_argument('--rate-limit-wait', type=float, default=60)
+            p.add_argument('--any-provider', action='store_true',
+                           help='提炼洞见时不固定服务商（同一模型由 OpenRouter 自动选择服务商）')
     p = sub.add_parser('show-memory')
     p.add_argument('--task-id', type=int, required=True)
     p.add_argument('--condition', default='full')
