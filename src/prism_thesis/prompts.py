@@ -27,35 +27,26 @@ class Unit:
     kind: str = 'system'
 
 
+# 单元文本沿用预实验验证过的措辞（Llama-3.1-8B 在开发集前 40 题上 60% 成功，与预实验 59% 相当）；
+# 改写后的措辞（提到“修改行”“done”）会让该模型在查询题中自行执行修改，成功率降到 15%–40%。
 ACTION_UNITS = [
-    Unit('role', 'core', "You are an agent that operates a MySQL database to complete the user's task. "
-         'In every response, output exactly one action: either a database operation or the final answer.',
+    Unit('role', 'core', "You operate a MySQL database to complete the user's task.", core=True),
+    Unit('op_format', 'core', 'For a database operation output exactly:\nAction: Operation\n```sql\nYOUR_SQL\n```',
          core=True),
-    Unit('op_format', 'core', 'To operate the database, output exactly the following; the first line is always '
-         'the literal text "Action: Operation", and the SQL must be inside the ```sql code block:\n'
-         'Action: Operation\n```sql\nYOUR_SQL\n```\n'
-         'For example:\nAction: Operation\n```sql\nSELECT name FROM employees WHERE age > 30;\n```\n'
-         'The SQL will be executed and you will receive the raw MySQL result. '
-         'Do not write the result yourself.', core=True),
-    Unit('answer_action', 'core', 'When you are done, output exactly (the first line is always "Action: Answer"):\n'
+    Unit('answer_action', 'core', 'For the final answer output exactly:\n'
          'Action: Answer\nFinal Answer: YOUR_ANSWER_ON_ONE_LINE', core=True),
 ]
 
 RULE_UNITS = [
-    Unit('observe', 'observe', 'Base the final answer only on results you have actually observed; '
-         'do not guess values or claim success without executing the operation.'),
-    Unit('one_stmt', 'one_stmt', 'Write exactly one SQL statement per operation.'),
-    Unit('scope', 'scope', 'Only the given table is accessible. You may read and modify its rows, '
-         'but do not create, drop or alter tables or databases.'),
-    Unit('answer_query', 'answer_query', 'If the task asks a question about the data, run a SELECT and give the '
-         'Final Answer as the result rows: a list of tuples on one line, with values exactly as returned by MySQL, '
-         "e.g. [(1, 'Alice'), (2, 'Bob')]. Never insert, update or delete rows for such a task."),
-    Unit('empty_scalar', 'empty_scalar', 'If the result is empty, answer []. '
-         'If the result is a single value, answer [(value,)].'),
-    Unit('modify_answer', 'modify_answer', 'Only if the task itself asks to insert, update or delete rows: '
-         'execute exactly that modification; the table is checked afterwards, so the Final Answer can then be a '
-         'short confirmation such as done.'),
-    Unit('rounds', 'rounds', 'You have at most three responses in total.'),
+    Unit('observe', 'observe', 'Use actual tool observations.'),
+    Unit('one_stmt', 'one_stmt', 'Use exactly one SQL statement per operation; only the supplied task table is accessible.'),
+    Unit('scope', 'scope', 'Do not use session variables, file operations, locks, hints or nondeterministic/system '
+         'functions.'),
+    Unit('answer_query', 'answer_query', 'For a query, Final Answer must be a literal list of tuples, '
+         'e.g. [(1,"Alice"),(2,"Bob")].'),
+    Unit('empty_scalar', 'empty_scalar', 'For an empty query result use []; for a scalar result use [(value,)].'),
+    Unit('modify_answer', 'modify_answer', 'Do not claim success without observing the result.'),
+    Unit('rounds', 'rounds', 'You have at most three rounds.'),
 ]
 
 # 函数说明：函数集合覆盖 db_bench 任务可能用到的常见 MySQL 函数。

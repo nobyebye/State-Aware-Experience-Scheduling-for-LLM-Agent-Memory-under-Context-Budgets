@@ -1,5 +1,6 @@
 import random
 
+from prism_thesis.prompts import schema_text as _schema
 from prism_thesis.agent import build_messages, task_features
 from prism_thesis.data import load_tasks
 from prism_thesis.env import ExecResult
@@ -30,7 +31,7 @@ def table(value=0.0, phases=('initial', 'after_error', 'after_success', 'any')):
 
 def test_full_prompt_matches_official_task_text():
     msgs, _ = build_messages(QUERY, start(FullPolicy(), QUERY).plan(S0), [])
-    assert msgs[1]['content'] == QUERY.official_prompt
+    assert msgs[1]['content'] == (QUERY.instruction + '\n' + _schema(QUERY))
     assert 'Action: Operation' in msgs[0]['content']
 
 
@@ -67,7 +68,7 @@ def test_prism_high_risk_keeps_everything_in_tail():
     plan = p.plan(S0)
     assert plan.prefix | plan.tail == ALL_IDS and plan.tail and not plan.tail_in_system
     msgs, parts = build_messages(QUERY, plan, [])
-    assert msgs[-1]['content'].startswith(QUERY.instruction) and msgs[-1]['content'].endswith(QUERY.schema_text)
+    assert msgs[-1]['content'].startswith(QUERY.instruction) and msgs[-1]['content'].endswith(_schema(QUERY))
 
 
 def test_prism_unseen_state_sends_all():
@@ -101,7 +102,7 @@ def test_tail_not_written_to_history_and_cache_prefix_stable():
 def test_tail_in_system_ablation():
     plan = start(PrismPolicy(table(50.0), 2.0, COUNTER, tail_in_system=True), QUERY).plan(S0)
     msgs, _ = build_messages(QUERY, plan, [])
-    assert msgs[1]['content'] == QUERY.instruction and QUERY.schema_text in msgs[0]['content']
+    assert msgs[1]['content'] == QUERY.instruction and _schema(QUERY) in msgs[0]['content']
 
 
 def test_static_fixed_across_turns():

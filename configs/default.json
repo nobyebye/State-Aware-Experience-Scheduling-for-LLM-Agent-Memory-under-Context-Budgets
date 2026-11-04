@@ -1,6 +1,7 @@
 {
   "_说明": "实验配置。冻结后（校准开始前）不得修改；任何修改都要记录在 docs 中。价格与服务商路由在每次付费运行前到服务商页面核对。",
   "prompt_variant": "standard",
+  "schema_style": "legacy",
   "model": {
     "model": "meta-llama/llama-3.1-8b-instruct",
     "api_base": "https://openrouter.ai/api/v1",

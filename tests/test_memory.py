@@ -6,6 +6,7 @@ import random
 
 import pytest
 
+from prism_thesis.prompts import schema_text as _schema
 from prism_thesis import cli
 from prism_thesis.agent import build_messages, task_features
 from prism_thesis.config import ROOT, load_config, make_policy, split_condition
@@ -209,10 +210,10 @@ def test_full_memory_injection_puts_experience_before_task():
     exp = {u for u in plan.prefix if is_exp(u)}
     assert ALL_IDS <= plan.prefix and len(exp) == 3 + 2            # 3 条示例 + 2 条修复经验（无洞见）
     msgs, parts = build_messages(QUERY, plan, [], store)
-    assert msgs[1]['content'].startswith(MEMORY_HEADER) and msgs[1]['content'].endswith(QUERY.official_prompt)
+    assert msgs[1]['content'].startswith(MEMORY_HEADER) and msgs[1]['content'].endswith((QUERY.instruction + '\n' + _schema(QUERY)))
     assert parts['memory'] == render_memory(exp, store)
     plain, _ = build_messages(QUERY, start(FullPolicy()).plan(S0), [])
-    assert plain[1]['content'] == QUERY.official_prompt
+    assert plain[1]['content'] == (QUERY.instruction + '\n' + _schema(QUERY))
 
 
 def test_ablation_of_experience_group_and_exposure():
@@ -235,7 +236,7 @@ def test_prism_schedules_experience_with_instructions():
     assert len(exp) == 3 + 1 and not any(u.startswith('exp:r') for u in exp)   # 初始状态不检索修复经验
     msgs, parts = build_messages(QUERY, high, [], store)
     assert msgs[1]['content'].startswith(QUERY.instruction)       # 稳定前缀不含经验
-    assert parts['tail'].startswith(MEMORY_HEADER) and parts['tail'].endswith(QUERY.schema_text)
+    assert parts['tail'].startswith(MEMORY_HEADER) and parts['tail'].endswith(_schema(QUERY))
 
 
 def test_prism_error_driven_repair_is_forced_and_monotone():
