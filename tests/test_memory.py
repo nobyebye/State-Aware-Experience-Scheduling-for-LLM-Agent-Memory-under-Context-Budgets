@@ -433,3 +433,8 @@ def test_distill_retries_rate_limits_only():
     calls.clear()
     with pytest.raises(LLMError):
         cli.retry_rate_limited(flaky, 1, 1, sleep=waits.append)
+
+
+def test_parse_rules_strips_repeated_bullets():
+    assert mbuild.parse_rules('- - Avoid X.\n-  * Use Y.\n- Z', 3) == ['Avoid X.', 'Use Y.', 'Z']
+    assert mbuild.parse_rules('- - \n- ok', 3) == ['ok']

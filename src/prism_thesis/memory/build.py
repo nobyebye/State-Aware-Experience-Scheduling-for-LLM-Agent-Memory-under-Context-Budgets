@@ -165,12 +165,20 @@ def insight_messages(batch: Mapping, max_rules: int) -> list[dict]:
 _RULE = re.compile(r'^\s*[-*•]\s+(.+?)\s*$')
 
 
+_BULLETS = re.compile(r'^(?:[-*•](?:\s+|$))+')
+
+
+def clean_rule(rule: str) -> str:
+    """去掉规则开头多余的项目符号（模型有时写成 "- - Avoid ..."）。"""
+    return _BULLETS.sub('', rule.strip()).strip()
+
+
 def parse_rules(text: str, max_rules: int) -> list[str]:
     rules = []
     for line in (text or '').splitlines():
         m = _RULE.match(line)
-        if m and m.group(1):
-            rules.append(m.group(1))
+        if m and clean_rule(m.group(1)):
+            rules.append(clean_rule(m.group(1)))
     return rules[:max_rules]
 
 

@@ -288,6 +288,8 @@ def _insight_file(path, rehearsal: bool) -> list[Experience]:
     for e in data['insights']:
         for k in ('source_tasks', 'source_groups', 'source_splits'):
             e[k] = tuple(e[k])
+        e['key_text'] = mbuild.clean_rule(e['key_text'])       # 旧洞见文件中可能带多余的项目符号
+        e['text'] = f"Rule: {e['key_text']}"
         out.append(Experience(**e))
     return out
 
