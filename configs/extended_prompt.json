@@ -28,7 +28,7 @@
     "min_exposed_groups": 10,
     "risk_table": "results/risk/risk_table.json",
     "risk_table_single_only": "results/risk/risk_table_single_only.json",
-    "epsilons_pp": [1, 2, 4, 8]
+    "epsilons_pp": [1, 2, 4, 8, 16]
   },
   "baselines": {
     "random_k": 3,

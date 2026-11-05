@@ -118,7 +118,7 @@ python -m prism_thesis run --split memory --conditions nomem --reps 2 --out resu
 | 覆盖要求 | 风险表只写入暴露题目组数不少于 `prism.min_exposed_groups`（默认 10）的条目，其余回退完整上下文；`risk-estimate` 打印覆盖诊断 |
 | 互补组 | `complementary_pairs`（含 `exp_top1`+`insight`）中的两组在某状态下都做了单独消融时，必须同时运行联合消融 `ablate:<组1>+<组2>@<状态>`，否则 `risk-estimate` 拒绝；`--single-only`（供 `prism-singleonly` 消融）不使用联合消融记录 |
 | 冻结 | 冻结 `configs/default.json`、`results/memory/memory_store.json`、`results/risk/risk_table.json` 与本目录代码版本 |
-| 独立校准（构建集，10 次/题） | `run --split construction --conditions full,prism@1,prism@2,prism@4,prism@8 --reps 10`，再 `calibrate` |
+| 独立校准（构建集，10 次/题） | `run --split construction --conditions full,prism@1,prism@2,prism@4,prism@8,prism@16 --reps 10`，再 `calibrate` |
 | 最终对比（测试集，各条件 10 次） | `run --split test --conditions full,nomem,phase_switch,llmlingua2,static@4,random_drop,prism@<ε*> --reps 10`，再 `compare --split test` |
 | 消融（开发集） | `prism-stateless@ε`、`prism-nosig@ε`、`prism-norecovery@ε`、`prism-singleonly@ε`、`prism-tailsys@ε`、`prism-greedy@ε` |
 | 检索条数 k 的敏感性（开发集，3 次/题） | `run --split dev --conditions full#k=1,prism@<ε>#k=1,full#k=3,prism@<ε>#k=3,full#k=5,prism@<ε>#k=5 --reps 3`，再对每个 k 分别 `compare --split dev --reps-key k_sensitivity --control full#k=<k>`（输入只含该 k 的两个条件） |
