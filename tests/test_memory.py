@@ -455,3 +455,15 @@ def test_patient_llm_waits_on_rate_limit(monkeypatch):
             return 'resp'
     p = cli.PatientLLM(Flaky(), 5, 60)
     assert p.model == 'm' and p.chat([]) == 'resp' and state['n'] == 3
+
+
+def test_mysql_lock_refuses_second_holder(tmp_path):
+    from prism_thesis.cli import mysql_lock
+    first = mysql_lock(13306, str(tmp_path))
+    assert first is not None
+    assert mysql_lock(13306, str(tmp_path)) is None
+    assert mysql_lock(13400, str(tmp_path)) is not None
+    first.close()
+    again = mysql_lock(13306, str(tmp_path))
+    assert again is not None
+    again.close()

@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 from dataclasses import asdict
 import sys
@@ -65,6 +66,32 @@ def _tasks(args):
 
 def _groups() -> dict[int, str]:
     return {t.task_id: t.group_id for t in load_tasks(include_excluded=True)}
+
+
+MYSQL_COMMANDS = frozenset({'verify-env', 'dry-run', 'run'})
+
+
+def mysql_lock(base_port: int, lock_dir: str | None = None):
+    """独占本机这组 MySQL 容器；已被另一个程序占用时返回 None。
+
+    容器按端口命名（prism-mysql-<端口>），启动前会删除同名容器，
+    所以两个程序同时运行会互相删除对方的数据库。程序退出时系统自动释放锁。"""
+    try:
+        import fcntl
+    except ImportError:                  # Windows 没有 fcntl，不做保护
+        return open(os.devnull, 'w')
+    import tempfile
+    f = open(Path(lock_dir or tempfile.gettempdir()) / f'prism-mysql-{base_port}.lock', 'a+')
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    f.seek(0)
+    f.truncate()
+    f.write(f'{os.getpid()}\n')
+    f.flush()
+    return f
 
 
 def cmd_check_data(args, cfg):
@@ -627,6 +654,16 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     fn = globals()['cmd_' + args.cmd.replace('-', '_')]
+    if args.cmd in MYSQL_COMMANDS and cfg['mysql'].get('docker', True):
+        lock = mysql_lock(cfg['mysql']['base_port'])
+        if lock is None:
+            print(f"拒绝运行：本机已有另一个实验程序在使用 MySQL 容器（端口从 {cfg['mysql']['base_port']} 起）。"
+                  '两个程序同时运行会互相删除对方的容器。请先用 pgrep -af prism_thesis 找到并停掉它。')
+            return 1
+        try:
+            return fn(args, cfg)
+        finally:
+            lock.close()
     return fn(args, cfg)
 
 
