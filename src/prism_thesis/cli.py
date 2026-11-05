@@ -146,6 +146,8 @@ def cmd_run(args, cfg):
     m = cfg['model']
     llm = OpenAICompatibleLLM(m['model'], m['api_base'], m['api_key_env'], m['temperature'], m['top_p'],
                               m['max_tokens'], m['timeout'], m.get('extra_body'))
+    if args.rate_limit_retries > 0:
+        llm = PatientLLM(llm, args.rate_limit_retries, args.rate_limit_wait)
     if args.budget_usd is not None:
         cfg['run']['budget_usd'] = args.budget_usd
     try:
@@ -345,7 +347,7 @@ def cmd_build_memory(args, cfg):
     return 0
 
 
-def retry_rate_limited(call, retries: int, wait: float, sleep=time.sleep):
+def retry_rate_limited(call, retries: int, wait: float, sleep=None):
     """服务商临时限流（HTTP 429）时等待后重试；llm.py 内部的短重试用完后，在这里再等 retries × wait 秒。
     其他错误直接抛出。"""
     from .llm import LLMError
@@ -356,7 +358,19 @@ def retry_rate_limited(call, retries: int, wait: float, sleep=time.sleep):
             if 'HTTP 429' not in str(e) or attempt == retries:
                 raise
             print(f'服务商限流，{wait:g} 秒后重试（第 {attempt + 1} 次）', flush=True)
-            sleep(wait)
+            (sleep or time.sleep)(wait)
+
+
+class PatientLLM:
+    """服务商临时限流（HTTP 429）时等待后重试同一请求，避免限流期间成批记为基础设施错误。
+    只改变等待方式，不改变请求内容与结果，因此不计入实验指纹（本文件不属于实验代码）。"""
+
+    def __init__(self, llm, retries: int, wait: float):
+        self.llm, self.retries, self.wait = llm, retries, wait
+        self.model = getattr(llm, 'model', None)
+
+    def chat(self, messages):
+        return retry_rate_limited(lambda: self.llm.chat(messages), self.retries, self.wait)
 
 
 def cmd_distill_insights(args, cfg):
@@ -560,6 +574,9 @@ def main(argv=None) -> int:
         else:
             p.add_argument('--allow-paid', action='store_true')
             p.add_argument('--budget-usd', type=float)
+            p.add_argument('--rate-limit-retries', type=int, default=30,
+                           help='服务商限流（HTTP 429）时每个请求最多再等几次（0 表示不等，直接记为基础设施错误）')
+            p.add_argument('--rate-limit-wait', type=float, default=60, help='每次等待的秒数')
     p = sub.add_parser('risk-estimate')
     p.add_argument('--runs', nargs='+', required=True)
     p.add_argument('--out', required=True)

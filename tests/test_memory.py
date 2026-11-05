@@ -438,3 +438,20 @@ def test_distill_retries_rate_limits_only():
 def test_parse_rules_strips_repeated_bullets():
     assert mbuild.parse_rules('- - Avoid X.\n-  * Use Y.\n- Z', 3) == ['Avoid X.', 'Use Y.', 'Z']
     assert mbuild.parse_rules('- - \n- ok', 3) == ['ok']
+
+
+def test_patient_llm_waits_on_rate_limit(monkeypatch):
+    from prism_thesis.llm import LLMError
+    monkeypatch.setattr(cli.time, 'sleep', lambda s: None)
+    state = {'n': 0}
+
+    class Flaky:
+        model = 'm'
+
+        def chat(self, messages):
+            state['n'] += 1
+            if state['n'] < 3:
+                raise LLMError('HTTP 429: busy')
+            return 'resp'
+    p = cli.PatientLLM(Flaky(), 5, 60)
+    assert p.model == 'm' and p.chat([]) == 'resp' and state['n'] == 3
