@@ -118,3 +118,26 @@ def test_merged_groups_are_selected_together():
             t.entries[RiskTable.key('answer_query+empty_scalar', ph, x)] = 50.0
     plan = start(PrismPolicy(t, 2.0, COUNTER), QUERY).plan(S0)
     assert {'answer_query', 'empty_scalar'} <= plan.tail
+
+
+def test_prism_official_layout_matches_ablation_layout():
+    """正式 PRISM 与风险估计时的消融条件用同一布局：选中单元放在原位置，没有末尾临时块。"""
+    from prism_thesis.agent import build_messages
+    from prism_thesis.policies.base import FULL_PLAN
+    keep = start(PrismPolicy(table(50.0), 2.0, COUNTER, layout='official'), QUERY).plan(S0)
+    assert keep.tail == frozenset() and keep.prefix == ALL_IDS
+    assert build_messages(QUERY, keep, [])[0] == build_messages(QUERY, FULL_PLAN, [])[0]
+    drop = start(PrismPolicy(table(0.0), 100.0, COUNTER, layout='official'), QUERY).plan(S0)
+    assert drop.tail == frozenset() and drop.prefix == CORE_IDS
+
+
+def test_prism_factory_uses_official_layout(tmp_path):
+    from prism_thesis.config import load_config, make_policy
+    cfg = load_config()
+    path = tmp_path / 'rt.json'
+    table(1.0).save(path)
+    cfg['prism']['risk_table'] = cfg['prism']['risk_table_single_only'] = str(path)
+    cfg['memory']['enabled'] = False
+    for cond, layout in [('prism@4', 'official'), ('prism-greedy@4', 'official'), ('prism-singleonly@4', 'official'),
+                         ('prism-tail@4', 'tail'), ('prism-tailsys@4', 'tail')]:
+        assert make_policy(cond, cfg, COUNTER).layout == layout, cond

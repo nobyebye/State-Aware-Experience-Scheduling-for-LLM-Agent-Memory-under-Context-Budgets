@@ -51,7 +51,7 @@ steps = [
     ['dry-run', *lim, '--conditions', ','.join(
         ['full', 'nomem', 'phase_switch', 'random_drop', 'static@4'] + [f'prism@{e}' for e in cfg['prism']['epsilons_pp']]
         + ['prism-stateless@4', 'prism-norecovery@4', 'prism-tailsys@4', 'prism-singleonly@4', 'prism-nosig@4',
-           'prism-greedy@4', 'full#k=1', 'prism@4#k=1', 'full#k=5', 'prism@4#k=5']),
+           'prism-greedy@4', 'prism-tail@4', 'full#k=1', 'prism@4#k=1', 'full#k=5', 'prism@4#k=5']),
      '--out', str(out / 'methods.jsonl')],
     ['calibrate', '--runs', str(out / 'methods.jsonl'), '--rehearsal'],
     ['compare', '--runs', str(out / 'methods.jsonl'), '--split', 'dev', '--rehearsal', '--json', str(out / 'compare.json')],

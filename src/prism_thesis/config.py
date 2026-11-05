@@ -9,7 +9,8 @@
   prism@ε                      PRISM
   prism-stateless@ε            消融：风险不区分状态
   prism-norecovery@ε           消融：去掉补回
-  prism-tailsys@ε              消融：临时块放进系统消息
+  prism-tail@ε                 消融：稳定前缀 + 末尾临时块布局（核心单元与任务在前，其余选中单元附在最后一条消息后）
+  prism-tailsys@ε              消融：同上，但临时块放进系统消息
   prism-singleonly@ε           消融：只用单独留一的风险估计（不做互补合并）
   prism-nosig@ε                消融：出错后不按错误签名检索修复经验，只补回指令
   prism-greedy@ε               消融：贪心代替精确求解
@@ -98,7 +99,7 @@ def table_key(condition: str) -> str | None:
     name = split_condition(condition)[0].partition('@')[0]
     if name == 'prism-singleonly':
         return 'risk_table_single_only'
-    if name in ('static', 'prism', 'prism-stateless', 'prism-norecovery', 'prism-tailsys', 'prism-nosig',
+    if name in ('static', 'prism', 'prism-stateless', 'prism-norecovery', 'prism-tail', 'prism-tailsys', 'prism-nosig',
                 'prism-greedy'):
         return 'risk_table'
     return None
@@ -153,19 +154,21 @@ def _make_base_policy(condition: str, cfg: dict, counter: TokenCounter):
     if name == 'static':
         p = StaticPolicy(_table(cfg), eps, counter, step)
     elif name == 'prism':
-        p = PrismPolicy(_table(cfg), eps, counter, step)
+        p = PrismPolicy(_table(cfg), eps, counter, step, layout='official')
+    elif name == 'prism-tail':
+        p = PrismPolicy(_table(cfg), eps, counter, step, layout='tail')
     elif name == 'prism-stateless':
-        p = PrismPolicy(_table(cfg), eps, counter, step, stateless=True)
+        p = PrismPolicy(_table(cfg), eps, counter, step, stateless=True, layout='official')
     elif name == 'prism-norecovery':
-        p = PrismPolicy(_table(cfg), eps, counter, step, recovery=False)
+        p = PrismPolicy(_table(cfg), eps, counter, step, recovery=False, layout='official')
     elif name == 'prism-tailsys':
-        p = PrismPolicy(_table(cfg), eps, counter, step, tail_in_system=True)
+        p = PrismPolicy(_table(cfg), eps, counter, step, tail_in_system=True, layout='tail')
     elif name == 'prism-singleonly':
-        p = PrismPolicy(_table(cfg, 'risk_table_single_only'), eps, counter, step)
+        p = PrismPolicy(_table(cfg, 'risk_table_single_only'), eps, counter, step, layout='official')
     elif name == 'prism-nosig':
-        p = PrismPolicy(_table(cfg), eps, counter, step, signature=False)
+        p = PrismPolicy(_table(cfg), eps, counter, step, signature=False, layout='official')
     elif name == 'prism-greedy':
-        p = PrismPolicy(_table(cfg), eps, counter, step, greedy=True)
+        p = PrismPolicy(_table(cfg), eps, counter, step, greedy=True, layout='official')
     else:
         raise ValueError(f'未知条件：{condition}')
     p.name = condition

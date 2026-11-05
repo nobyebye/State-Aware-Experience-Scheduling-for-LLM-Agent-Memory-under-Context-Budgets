@@ -46,12 +46,20 @@ class PrismPolicy(Policy):
     检索的修复经验，单调累积）。每轮按状态与任务类型查风险表，在风险预算 ε 内用 0-1 背包选出省略 token 最多
     的组；显式错误后把相关指令组与修复经验补回并在之后各轮保持（M_t = M_{t−1} ∪ Map(e_{t−1})）；核心单元与
     任务指令放在稳定前缀，本轮选中的其余单元（含经验）作为末尾临时块，不写入历史。
+    layout='official'（正式条件使用）：选中的单元放在与完整提示相同的位置（指令在系统消息，经验块在任务之前），
+    与风险估计时消融条件的布局一致，只是省略被删除的组；layout='tail' 为上述稳定前缀 + 临时块布局（消融对照）。
     消融开关：stateless（风险不分状态）、recovery（补回指令组与修复经验）、signature（错误签名检索修复经验）、
     tail_in_system（临时块放进系统消息）、greedy（贪心代替精确求解）。"""
 
     def __init__(self, table: RiskTable, epsilon: float, counter: TokenCounter, step: float = 0.5,
                  stateless: bool = False, recovery: bool = True, tail_in_system: bool = False,
-                 signature: bool = True, greedy: bool = False, name: Optional[str] = None):
+                 signature: bool = True, greedy: bool = False, name: Optional[str] = None,
+                 layout: str = 'tail'):
+        if layout not in ('tail', 'official'):
+            raise ValueError(f'未知布局：{layout}')
+        if layout == 'official' and tail_in_system:
+            raise ValueError('tail_in_system 只用于 tail 布局')
+        self.layout = layout
         self.table, self.epsilon, self.counter, self.step = table, epsilon, counter, step
         self.stateless, self.recovery, self.tail_in_system = stateless, recovery, tail_in_system
         self.signature, self.greedy = signature, greedy
@@ -79,6 +87,11 @@ class PrismPolicy(Policy):
                       self.epsilon, self.step, self.reincluded, solver)
         info = {'phase': phase, 'reincluded': sorted(self.reincluded), 'n_repairs': len(repairs)}
         exp_units = frozenset(u for g, us in groups.items() for u in us if is_exp(u))
+        if self.layout == 'official':
+            if drop is None:              # 风险表缺项：全部发送
+                return Plan(prefix=ALL_IDS | exp_units, info={**info, 'fallback': 'unseen_state'})
+            selected = frozenset().union(*(u for g, u in groups.items() if g not in drop))
+            return Plan(prefix=CORE_IDS | selected, info={**info, 'dropped': sorted(drop)})
         if drop is None:                  # 风险表缺项：全部发送，布局不变（稳定前缀只含核心单元）
             return Plan(prefix=CORE_IDS, tail=(ALL_IDS - CORE_IDS) | exp_units, tail_in_system=self.tail_in_system,
                         info={**info, 'fallback': 'unseen_state'})
