@@ -256,6 +256,40 @@ def _precheck(recs, conditions, cfg, split, reps, rehearsal) -> bool:
     return True
 
 
+def cmd_accept_fingerprints(args, cfg):
+    """把已完成的正式记录的指纹登记进冻结指纹表，使代码更新后仍能比较这些记录。
+    每个条件只能有一个指纹；登记内容含记录中的代码版本，便于在论文中说明。"""
+    from datetime import datetime, timezone
+    from .checks import accepted_path
+    try:
+        recs = load_records([Path(p) for p in args.runs])
+    except ExperimentMismatch as e:
+        print(f'拒绝登记：{e}')
+        return 1
+    by: dict[str, dict] = {}
+    for r in recs:
+        by.setdefault(r['condition'], {}).setdefault(r.get('fingerprint'), set()).add(r.get('code_version'))
+    path = accepted_path(cfg)
+    data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+    bad = {c: sorted(map(str, fps)) for c, fps in by.items() if len(fps) != 1}
+    if bad:
+        print(f'拒绝登记：以下条件有多个指纹 {bad}')
+        return 1
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    for c, fps in sorted(by.items()):
+        (fp, versions), = fps.items()
+        entries = data.setdefault(c, [])
+        if any(e['fingerprint'] == fp for e in entries):
+            continue
+        entries.append({'fingerprint': fp, 'code_versions': sorted(map(str, versions)),
+                        'runs': [str(p) for p in args.runs], 'accepted_at': now})
+        print(f'{c:28s} 指纹 {fp}  代码版本 {sorted(map(str, versions))}')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
+    print(f'已写入 {path}')
+    return 0
+
+
 def cmd_calibrate(args, cfg):
     try:
         recs = load_records([Path(p) for p in args.runs])
@@ -609,6 +643,8 @@ def main(argv=None) -> int:
     p.add_argument('--out', required=True)
     p.add_argument('--single-only', action='store_true')
     p.add_argument('--rehearsal', action='store_true', help='演练：只做一致性检查，结果不得用于冻结或论文')
+    p = sub.add_parser('accept-fingerprints', help='登记已完成正式记录的指纹，代码更新后仍可比较')
+    p.add_argument('--runs', nargs='+', required=True)
     p = sub.add_parser('calibrate')
     p.add_argument('--runs', nargs='+', required=True)
     p.add_argument('--rehearsal', action='store_true', help='演练：只做一致性检查，结果不得用于冻结或论文')

@@ -5,6 +5,7 @@
   full                         完整记忆注入（ExpeL 式）：完整指令 + 任务开始时检索的全部经验；非劣检验的参照
                                （配置 memory.enabled 为 false 时不使用记忆，full 与 nomem 相同）
   phase_switch / random_drop / llmlingua2
+  llmlingua2-mem               LLMLingua-2 只压缩经验中的规则与示例题目描述（格式、表信息与 SQL 原样）
   static@ε                     自建静态基线（ε 为风险预算，百分点）
   prism@ε                      PRISM
   prism-stateless@ε            消融：风险不区分状态
@@ -138,11 +139,12 @@ def _make_base_policy(condition: str, cfg: dict, counter: TokenCounter):
         p = RandomDropPolicy(cfg['baselines']['random_k'])
         p.name = 'random_drop'
         return p
-    if condition == 'llmlingua2':
+    if condition in ('llmlingua2', 'llmlingua2-mem'):
         from .policies.llmlingua2 import LLMLingua2Policy
         c = cfg['baselines']['llmlingua2']
-        p = LLMLingua2Policy(c['rate'], c['model_name'], c.get('revision'), c.get('device', 'cpu'))
-        p.name = 'llmlingua2'
+        p = LLMLingua2Policy(c['rate'], c['model_name'], c.get('revision'), c.get('device', 'cpu'),
+                             scope='memory' if condition == 'llmlingua2-mem' else 'all')
+        p.name = condition
         return p
     ab = parse_ablation(condition)
     if ab:

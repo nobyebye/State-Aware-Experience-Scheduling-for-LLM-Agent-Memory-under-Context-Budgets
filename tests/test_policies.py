@@ -141,3 +141,35 @@ def test_prism_factory_uses_official_layout(tmp_path):
     for cond, layout in [('prism@4', 'official'), ('prism-greedy@4', 'official'), ('prism-singleonly@4', 'official'),
                          ('prism-tail@4', 'tail'), ('prism-tailsys@4', 'tail')]:
         assert make_policy(cond, cfg, COUNTER).layout == layout, cond
+
+
+class _FakeCompressor:
+    def compress_prompt(self, text, rate, force_tokens):
+        return {'compressed_prompt': ' '.join(text.split()[::2])}
+
+
+def test_llmlingua2_mem_keeps_format_and_sql():
+    from prism_thesis.policies.llmlingua2 import LLMLingua2Policy
+    p = LLMLingua2Policy(0.5, 'x', scope='memory', compressor=_FakeCompressor())
+    mem = ('Experience from past tasks (for reference only):\n\nRule: always group the OR conditions carefully\n\n'
+           'Example task: count the rows where status is active\nAction: Operation\n```sql\nSELECT a, b FROM t;\n```\n'
+           'Action: Answer\nFinal Answer: [(1,)]\n\nFix for a similar error: Error 1054\nFailed SQL:\nSELECT x FROM t;')
+    out = p.compress_memory_prose(mem)
+    for keep in ('Experience from past tasks (for reference only):', 'Action: Operation', '```sql',
+                 'SELECT a, b FROM t;', 'Final Answer: [(1,)]', 'Failed SQL:', 'SELECT x FROM t;'):
+        assert keep in out
+    assert 'Rule: always the conditions' in out and 'Example task: count rows status active' in out
+    assert p.name == 'llmlingua2-mem@0.5'
+
+
+def test_accepted_fingerprints_let_old_records_pass(tmp_path):
+    import json
+    from prism_thesis.checks import check_records
+    from prism_thesis.config import load_config
+    cfg = load_config()
+    cfg['accepted_fingerprints'] = str(tmp_path / 'acc.json')
+    recs = [{'condition': 'full', 'task_id': t.task_id, 'rep': 0, 'split': 'test', 'model': cfg['model']['model'],
+             'fingerprint': 'old'} for t in load_tasks('test')]
+    assert any('实验指纹' in p for p in check_records(recs, ['full'], cfg, 'test', 1))
+    (tmp_path / 'acc.json').write_text(json.dumps({'full': [{'fingerprint': 'old'}]}))
+    assert check_records(recs, ['full'], cfg, 'test', 1) == []

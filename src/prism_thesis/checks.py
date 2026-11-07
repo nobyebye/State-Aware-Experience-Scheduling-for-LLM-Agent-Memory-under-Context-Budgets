@@ -2,17 +2,38 @@
 
 正式模式要求：记录全部来自指定划分；每个条件覆盖该划分的全部题目（已排除的题目除外），
 且每题的重复编号恰为 0..R−1，R 等于配置 reps 中为该阶段、该条件预定的次数；模型为配置中的目标模型，
-不含脚本化智能体；每个条件只有一个实验指纹，且与当前配置、风险表内容与实验相关代码一致。
+不含脚本化智能体；每个条件只有一个实验指纹，且与当前配置、风险表内容与实验相关代码一致，
+或者已登记在冻结指纹表中（accept-fingerprints 命令写入；用于代码更新后仍比较更新前已完成的正式记录，
+登记时记下这些记录的代码版本）。
 任何一项不满足都拒绝给出结论。
 演练模式（rehearsal）只检查各条件题目集合一致、每题重复完整，用于不花钱的流程演练，结果不得用于冻结或论文。
 """
 from __future__ import annotations
 
+import json
 from collections import defaultdict
+from pathlib import Path
 from typing import Mapping, Optional, Sequence, Union
 
 from .data import load_tasks
 from .runner import experiment_fingerprint
+
+ACCEPTED_FINGERPRINTS = 'results/frozen/accepted_fingerprints.json'
+
+
+def accepted_path(cfg: dict) -> Path:
+    from .config import ROOT
+    p = Path(cfg.get('accepted_fingerprints', ACCEPTED_FINGERPRINTS))
+    return p if p.is_absolute() else ROOT / p
+
+
+def load_accepted(cfg: dict) -> dict[str, set[str]]:
+    """冻结指纹表：条件 → 已登记的指纹集合。文件不存在时为空。"""
+    p = accepted_path(cfg)
+    if not p.exists():
+        return {}
+    data = json.loads(p.read_text(encoding='utf-8'))
+    return {c: {e['fingerprint'] for e in entries} for c, entries in data.items()}
 
 REHEARSAL_BANNER = '【演练模式】输入未经正式检查，以下结果不得用于冻结、校准结论或论文。'
 
@@ -68,9 +89,12 @@ def check_records(records: Sequence[Mapping], conditions: Sequence[str], cfg: di
     models = sorted({str(r.get('model')) for r in records})
     if models != [cfg['model']['model']]:
         problems.append(f"记录中的模型为 {models}，要求只有 {cfg['model']['model']}（不接受脚本化智能体）")
+    accepted = load_accepted(cfg)
     for c in present:
         fps = sorted({str(r.get('fingerprint')) for r in records if r['condition'] == c})
         want = experiment_fingerprint(cfg, c, paid=True)
+        if len(fps) == 1 and fps[0] in accepted.get(c, set()):
+            continue
         if fps != [want]:
             problems.append(f'条件 {c} 的实验指纹为 {fps}，与当前配置、代码与风险表内容的 {want} 不一致')
     return problems

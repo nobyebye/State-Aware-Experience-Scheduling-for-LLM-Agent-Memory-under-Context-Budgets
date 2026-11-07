@@ -120,6 +120,8 @@ python -m prism_thesis run --split memory --conditions nomem --reps 2 --out resu
 | 冻结 | 冻结 `configs/default.json`、`results/memory/memory_store.json`、`results/risk/risk_table.json` 与本目录代码版本 |
 | 独立校准（构建集，10 次/题） | `run --split construction --conditions full,prism@1,prism@2,prism@4,prism@8,prism@16 --reps 10`，再 `calibrate` |
 | 最终对比（测试集，各条件 10 次） | `run --split test --conditions full,nomem,phase_switch,llmlingua2,static@4,random_drop,prism@<ε*> --reps 10`，再 `compare --split test` |
+| LLMLingua-2 只压缩经验文字（测试集） | 条件 `llmlingua2-mem`：只压缩经验块中 `Rule:` 与 `Example task:` 行的正文，系统指令、表信息、代码块、Action/Final Answer 行原样保留；`llmlingua2` 为全文压缩 |
+| 代码更新后比较已完成的正式记录 | 先 `accept-fingerprints --runs <结果文件>` 把这些记录的指纹（含代码版本）登记到 `results/frozen/accepted_fingerprints.json`，`calibrate`/`compare` 的指纹检查接受已登记的指纹 |
 | 消融（开发集） | `prism-stateless@ε`、`prism-nosig@ε`、`prism-norecovery@ε`、`prism-singleonly@ε`、`prism-tail@ε`（稳定前缀 + 末尾临时块布局）、`prism-tailsys@ε`、`prism-greedy@ε` |
 | 检索条数 k 的敏感性（开发集，3 次/题） | `run --split dev --conditions full#k=1,prism@<ε>#k=1,full#k=3,prism@<ε>#k=3,full#k=5,prism@<ε>#k=5 --reps 3`，再对每个 k 分别 `compare --split dev --reps-key k_sensitivity --control full#k=<k>`（输入只含该 k 的两个条件） |
 | 计数核对 | `token-audit` |

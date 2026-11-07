@@ -89,7 +89,7 @@ def experiment_fingerprint(cfg: dict, condition: str, paid: bool = True) -> str:
     if settings is not None:            # 记忆库内容与检索设置（无记忆条件不依赖记忆库）
         path = memory_path(cfg)
         parts['memory'] = {'store': _sha(path.read_bytes()) if path.exists() else 'missing', 'retrieval': settings}
-    if split_condition(condition)[0].partition('@')[0] in ('random_drop', 'llmlingua2'):
+    if split_condition(condition)[0].partition('@')[0] in ('random_drop', 'llmlingua2', 'llmlingua2-mem'):
         parts['baselines'] = cfg['baselines']
     return _sha(_canon(parts))[:16]
 
