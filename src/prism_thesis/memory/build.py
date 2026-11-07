@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from dataclasses import replace
 from typing import Callable, Iterable, Mapping, Optional, Sequence
 
 from ..data import Task
@@ -44,13 +45,28 @@ def _usable(records: Iterable[Mapping]) -> list[Mapping]:
     return sorted(rs, key=lambda r: (r['task_id'], r['rep']))
 
 
-def example_text(task: Task, sqls: Sequence[str], answer: str, max_answer_chars: int) -> str:
+OBS_PREFIX = 'MySQL result: '
+
+
+def _clip(text: str, n: int) -> str:
+    return text if len(text) <= n else text[:n] + ' ...(truncated)'
+
+
+def example_text(task: Task, sqls: Sequence[str], answer: str, max_answer_chars: int,
+                 observations: Optional[Sequence[str]] = None) -> str:
+    """observations：每条 SQL 的执行结果；给出时写在该 SQL 之后（诊断实验“示例带执行结果”用）。"""
     if isinstance(sqls, str):
         sqls = [sqls]
     if answer is None or len(answer) > max_answer_chars:
         answer = '(the result rows exactly as returned by MySQL)' if task_type(task.instruction) == 'query' \
             else 'done'
-    ops = ''.join(f'Action: Operation\n```sql\n{sql}\n```\n' for sql in sqls)
+    if observations is None:
+        ops = ''.join(f'Action: Operation\n```sql\n{sql}\n```\n' for sql in sqls)
+    else:
+        if len(observations) != len(sqls):
+            raise ValueError('执行结果条数与 SQL 条数不一致')
+        ops = ''.join(f'Action: Operation\n```sql\n{sql}\n```\n{OBS_PREFIX}{_clip(o, max_answer_chars)}\n'
+                      for sql, o in zip(sqls, observations))
     return f'Example task: {task.instruction}\n{ops}Action: Answer\nFinal Answer: {answer}'
 
 
@@ -62,25 +78,53 @@ def _source(task: Task) -> dict:
     return {'source_tasks': (task.task_id,), 'source_groups': (task.group_id,), 'source_splits': (task.split,)}
 
 
-def extract_examples(records: Sequence[Mapping], tasks: Mapping[int, Task],
-                     max_answer_chars: int = 300) -> list[Experience]:
+def _best_examples(records: Sequence[Mapping]) -> dict[int, tuple]:
+    """每道题选一次成功运行（轮数最少、重复编号最小者）：题号 → (排序键, 成功 SQL, 执行结果, 答案)。"""
     best: dict[int, tuple] = {}
     for r in _usable(records):
         if not r.get('success'):
             continue
-        ok_sql = [t['content'] for t in r.get('turns', []) if t.get('action') == 'operation'
-                  and t.get('exec', {}).get('ok')]
-        if not ok_sql:
+        ok = [t for t in r.get('turns', []) if t.get('action') == 'operation' and t.get('exec', {}).get('ok')]
+        if not ok:
             continue
         key = (len(r.get('turns', [])), r['rep'])
         if r['task_id'] not in best or key < best[r['task_id']][0]:
-            best[r['task_id']] = (key, tuple(ok_sql), r.get('answer'))
+            best[r['task_id']] = (key, tuple(t['content'] for t in ok),
+                                  tuple(str(t.get('observation', '')) for t in ok), r.get('answer'))
+    return best
+
+
+def extract_examples(records: Sequence[Mapping], tasks: Mapping[int, Task],
+                     max_answer_chars: int = 300) -> list[Experience]:
+    best = _best_examples(records)
     out = []
     for tid in sorted(best):
         task = tasks[tid]
-        _, sqls, answer = best[tid]
+        _, sqls, _, answer = best[tid]
         out.append(Experience(f'ex-{tid}', 'example', example_text(task, sqls, answer, max_answer_chars),
                               task.instruction, task_type(task.instruction), **_source(task)))
+    return out
+
+
+def with_example_observations(entries: Sequence[Experience], records: Sequence[Mapping],
+                              tasks: Mapping[int, Task], max_answer_chars: int = 300) -> list[Experience]:
+    """诊断实验用：把记忆库中每条成功示例改写为“每条 SQL 之后写出其执行结果”的版本，其余条目不变。
+    执行结果取自构建该示例的同一次运行（与 extract_examples 相同的选择规则）；先核对按原规则重建的文本
+    与库中文本完全一致，不一致时拒绝（说明记录与记忆库不对应）。检索文本、来源与 id 都不变。"""
+    best = _best_examples(records)
+    out = []
+    for e in entries:
+        if e.kind != 'example':
+            out.append(e)
+            continue
+        tid = e.source_tasks[0]
+        if tid not in best:
+            raise ValueError(f'记录中没有示例 {e.eid} 的来源运行')
+        _, sqls, obs, answer = best[tid]
+        task = tasks[tid]
+        if example_text(task, sqls, answer, max_answer_chars) != e.text:
+            raise ValueError(f'示例 {e.eid} 与记录重建的文本不一致，记录与记忆库不对应')
+        out.append(replace(e, text=example_text(task, sqls, answer, max_answer_chars, obs)))
     return out
 
 

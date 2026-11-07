@@ -408,6 +408,29 @@ def cmd_build_memory(args, cfg):
     return 0
 
 
+def cmd_add_example_observations(args, cfg):
+    """诊断实验用：由现有记忆库生成“示例中写出每条 SQL 执行结果”的版本（不花钱）。"""
+    src = Path(args.store) if args.store else memory_path(cfg)
+    store = MemoryStore.load(src)
+    try:
+        recs = [r for r in load_records([Path(p) for p in args.runs]) if r['condition'] == 'nomem']
+        mbuild.check_sources(recs)
+        tasks = {t.task_id: t for t in load_tasks(include_excluded=True)}
+        entries = mbuild.with_example_observations(store.entries, recs, tasks,
+                                                   cfg['memory'].get('max_answer_chars', 300))
+    except (ExperimentMismatch, ValueError) as e:
+        print(f'拒绝生成：{e}')
+        return 1
+    meta = {**store.meta, 'example_observations': {
+        'base_store': str(src), 'base_store_sha256': hashlib.sha256(src.read_bytes()).hexdigest(),
+        'runs': [{'path': str(p), 'sha256': hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in args.runs]}}
+    out = MemoryStore(entries, meta=meta)
+    out.save(Path(args.out))
+    n = sum(e.kind == 'example' for e in entries)
+    print(f'已为 {n} 条示例写出执行结果（其余 {len(entries) - n} 条不变）→ {args.out}')
+    return 0
+
+
 def retry_rate_limited(call, retries: int, wait: float, sleep=None):
     """服务商临时限流（HTTP 429）时等待后重试；llm.py 内部的短重试用完后，在这里再等 retries × wait 秒。
     其他错误直接抛出。"""
@@ -670,6 +693,10 @@ def main(argv=None) -> int:
             p.add_argument('--rate-limit-wait', type=float, default=60)
             p.add_argument('--any-provider', action='store_true',
                            help='提炼洞见时不固定服务商（同一模型由 OpenRouter 自动选择服务商）')
+    p = sub.add_parser('add-example-observations', help='诊断实验：生成示例带执行结果的记忆库（不花钱）')
+    p.add_argument('--runs', nargs='+', required=True, help='构建记忆库时用的 nomem 运行记录')
+    p.add_argument('--store', help='默认为配置中的 memory.store')
+    p.add_argument('--out', required=True)
     p = sub.add_parser('show-memory')
     p.add_argument('--task-id', type=int, required=True)
     p.add_argument('--condition', default='full')

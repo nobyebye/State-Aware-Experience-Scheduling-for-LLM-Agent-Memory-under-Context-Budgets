@@ -467,3 +467,58 @@ def test_mysql_lock_refuses_second_holder(tmp_path):
     again = mysql_lock(13306, str(tmp_path))
     assert again is not None
     again.close()
+
+
+def test_example_observations_variant_keeps_everything_but_example_text():
+    """诊断实验：示例改写为带执行结果的版本；id、检索文本与其他条目不变；记录与记忆库不对应时拒绝。"""
+    tasks = DEV[:3]
+    recs = sample_records(tasks)
+    recs[0]['turns'][0]['observation'] = "[(Decimal('6800'),)]"
+    store = sample_store(tasks)
+    new = mbuild.with_example_observations(store.entries, recs, TASKS)
+    assert [e.eid for e in new] == [e.eid for e in store.entries]
+    for a, b in zip(store.entries, new):
+        assert a.key_text == b.key_text and a.source_tasks == b.source_tasks
+        if a.kind == 'example':
+            assert b.text != a.text and mbuild.OBS_PREFIX in b.text
+            assert b.text.replace(b.text.split('```\n', 2)[1].split('\n')[0] + '\n', '', 1) == a.text
+        else:
+            assert b == a
+    assert "MySQL result: [(Decimal('6800'),)]" in new[0].text
+    assert new[0].text.index('```\nMySQL result:') < new[0].text.index('Action: Answer')
+    bad = copy.deepcopy(recs)
+    bad[0]['turns'][0]['content'] = 'SELECT other'
+    with pytest.raises(ValueError):
+        mbuild.with_example_observations(store.entries, bad, TASKS)
+
+
+def test_example_observations_multi_step_and_truncation():
+    t = DEV[0]
+    r = rec(t, 0, True, [op('UPDATE t SET a = 1', obs='[]'), op('SELECT a FROM t', obs='[' + '(1,), ' * 200 + ']'),
+                         ans('[(1,)]')])
+    base = mbuild.extract_examples([r], TASKS, max_answer_chars=50)
+    text = mbuild.with_example_observations(base, [r], TASKS, max_answer_chars=50)[0].text
+    assert text.count(mbuild.OBS_PREFIX) == 2 and 'MySQL result: []\n' in text and '...(truncated)' in text
+
+
+def test_obs_examples_config_differs_only_in_memory_store():
+    a = json.loads((ROOT / 'configs' / 'default.json').read_text(encoding='utf-8'))
+    b = json.loads((ROOT / 'configs' / 'obs_examples.json').read_text(encoding='utf-8'))
+    assert b['memory'].pop('store') != a['memory'].pop('store')
+    a.pop('_说明'); b.pop('_说明')
+    assert a == b
+
+
+def test_after_success_bundle_ablations_parse_and_only_change_after_success():
+    """诊断实验的整块删除条件不需要新代码：消融条件可列多组。"""
+    store = sample_store(DEV[:6])
+    for cond, groups in [('ablate:exp_top1+exp_rest@after_success', {'exp_top1', 'exp_rest'}),
+                         ('ablate:one_stmt+scope+fn_predicted+fn_other+schema+exp_top1+exp_rest+repair@after_success',
+                          {'one_stmt', 'scope', 'fn_predicted', 'fn_other', 'schema', 'exp_top1', 'exp_rest', 'repair'})]:
+        p = with_memory(AblationPolicy(*__import__('prism_thesis.prism.risk', fromlist=['x']).parse_ablation(cond)), store)
+        start(p, DEV[1])
+        assert p.name == cond
+        assert p.plan(S0).units == p.full_units() and p.plan(S_ERR).units == p.full_units()
+        dropped = p.full_units() - p.plan(S_OK).units
+        allg = p.static_groups()
+        assert dropped == frozenset().union(*(allg[g] for g in groups)) - CORE_IDS
