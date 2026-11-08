@@ -29,7 +29,8 @@ from pathlib import Path
 from . import stats
 from .checks import REHEARSAL_BANNER, check_records
 from .agent import build_messages, task_features
-from .config import ROOT, RehearsalArtifact, load_config, make_policy, make_retriever, memory_path, memory_settings
+from .config import (ROOT, RehearsalArtifact, load_config, make_policy, make_retriever, memory_path, memory_settings,
+                     table_path)
 from .data import load_tasks
 from .env import MySQLServer, TaskSession
 from .evaluate import match_direct
@@ -232,6 +233,41 @@ def cmd_risk_estimate(args, cfg):
     return 0
 
 
+def cmd_add_bundles(args, cfg):
+    """补充实验 PRISM-bundle：在已有风险表上加入由联合消融估计的组合组（不花钱）。"""
+    from .prism.risk import RiskTable, add_bundles, bundle_condition
+    try:
+        recs = load_records([Path(p) for p in args.runs])
+    except ExperimentMismatch as e:
+        print(f'拒绝估计：{e}')
+        return 1
+    bundles = cfg['prism']['bundles']
+    if {r['split'] for r in recs} != {'development'}:
+        print(f"拒绝估计：组合风险只用开发集记录，输入中有 {sorted({r['split'] for r in recs})}")
+        return 1
+    src = Path(args.table) if args.table else table_path(cfg)
+    tasks = {t.task_id: t for t in load_tasks(include_excluded=True)}
+    type_of = {tid: task_features(t).task_type for tid, t in tasks.items()}
+    try:
+        table = add_bundles(RiskTable.load(src), recs, bundles, _groups(), type_of, b=cfg['stats']['bootstrap'],
+                            seed=cfg['stats']['seed'], min_exposed_groups=cfg['prism']['min_exposed_groups'])
+    except ValueError as e:
+        print(f'拒绝估计：{e}')
+        return 1
+    table.meta['bundle_source'] = {
+        'base_table': str(src), 'base_table_sha256': hashlib.sha256(src.read_bytes()).hexdigest(),
+        'runs': [{'path': str(p), 'sha256': hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in args.runs]}
+    for key, c in sorted(table.meta['bundle_coverage'].items()):
+        state = f"{table.entries[key]:.2f}" if key in table.entries else '暴露不足，不写入'
+        print(f"{key:42s} 下降 {c['estimate_pp']:+.2f}pp [{c['low_pp']:+.2f}, {c['high_pp']:+.2f}]  "
+              f"暴露 {c['exposed_groups']} 组  风险 {state}")
+    out = Path(args.out) if args.out else table_path(cfg, 'risk_table_bundles')
+    out.parent.mkdir(parents=True, exist_ok=True)
+    table.save(out)
+    print(f'风险表 {len(table.entries)} 项（含组合 {sorted(bundles)}）→ {out}')
+    return 0
+
+
 def _required_joints(conds, pairs) -> list[str]:
     """配置中的互补组在某状态下两组都做了单独消融时，必须有对应的联合消融（任一顺序书写均可）。"""
     out = []
@@ -405,6 +441,29 @@ def cmd_build_memory(args, cfg):
     c = store.counts()
     print(f"记忆库 {len(store.entries)} 条（成功示例 {c['example']}，修复经验 {c['repair']}，洞见 {c['insight']}）"
           f"，来自 {len(recs)} 次运行 → {out}")
+    return 0
+
+
+def cmd_add_example_observations(args, cfg):
+    """诊断实验用：由现有记忆库生成“示例中写出每条 SQL 执行结果”的版本（不花钱）。"""
+    src = Path(args.store) if args.store else memory_path(cfg)
+    store = MemoryStore.load(src)
+    try:
+        recs = [r for r in load_records([Path(p) for p in args.runs]) if r['condition'] == 'nomem']
+        mbuild.check_sources(recs)
+        tasks = {t.task_id: t for t in load_tasks(include_excluded=True)}
+        entries = mbuild.with_example_observations(store.entries, recs, tasks,
+                                                   cfg['memory'].get('max_answer_chars', 300))
+    except (ExperimentMismatch, ValueError) as e:
+        print(f'拒绝生成：{e}')
+        return 1
+    meta = {**store.meta, 'example_observations': {
+        'base_store': str(src), 'base_store_sha256': hashlib.sha256(src.read_bytes()).hexdigest(),
+        'runs': [{'path': str(p), 'sha256': hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in args.runs]}}
+    out = MemoryStore(entries, meta=meta)
+    out.save(Path(args.out))
+    n = sum(e.kind == 'example' for e in entries)
+    print(f'已为 {n} 条示例写出执行结果（其余 {len(entries) - n} 条不变）→ {args.out}')
     return 0
 
 
@@ -643,6 +702,10 @@ def main(argv=None) -> int:
     p.add_argument('--out', required=True)
     p.add_argument('--single-only', action='store_true')
     p.add_argument('--rehearsal', action='store_true', help='演练：只做一致性检查，结果不得用于冻结或论文')
+    p = sub.add_parser('add-bundles', help='补充实验：风险表加入由联合消融估计的组合组（不花钱）')
+    p.add_argument('--runs', nargs='+', required=True, help='开发集上 full 与组合联合消融的记录')
+    p.add_argument('--table', help='默认为配置中的 prism.risk_table')
+    p.add_argument('--out', help='默认为配置中的 prism.risk_table_bundles')
     p = sub.add_parser('accept-fingerprints', help='登记已完成正式记录的指纹，代码更新后仍可比较')
     p.add_argument('--runs', nargs='+', required=True)
     p = sub.add_parser('calibrate')
@@ -670,6 +733,10 @@ def main(argv=None) -> int:
             p.add_argument('--rate-limit-wait', type=float, default=60)
             p.add_argument('--any-provider', action='store_true',
                            help='提炼洞见时不固定服务商（同一模型由 OpenRouter 自动选择服务商）')
+    p = sub.add_parser('add-example-observations', help='诊断实验：生成示例带执行结果的记忆库（不花钱）')
+    p.add_argument('--runs', nargs='+', required=True, help='构建记忆库时用的 nomem 运行记录')
+    p.add_argument('--store', help='默认为配置中的 memory.store')
+    p.add_argument('--out', required=True)
     p = sub.add_parser('show-memory')
     p.add_argument('--task-id', type=int, required=True)
     p.add_argument('--condition', default='full')

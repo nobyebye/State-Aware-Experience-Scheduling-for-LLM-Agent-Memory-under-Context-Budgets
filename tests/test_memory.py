@@ -467,3 +467,149 @@ def test_mysql_lock_refuses_second_holder(tmp_path):
     again = mysql_lock(13306, str(tmp_path))
     assert again is not None
     again.close()
+
+
+def test_example_observations_variant_keeps_everything_but_example_text():
+    """诊断实验：示例改写为带执行结果的版本；id、检索文本与其他条目不变；记录与记忆库不对应时拒绝。"""
+    tasks = DEV[:3]
+    recs = sample_records(tasks)
+    recs[0]['turns'][0]['observation'] = "[(Decimal('6800'),)]"
+    store = sample_store(tasks)
+    new = mbuild.with_example_observations(store.entries, recs, TASKS)
+    assert [e.eid for e in new] == [e.eid for e in store.entries]
+    for a, b in zip(store.entries, new):
+        assert a.key_text == b.key_text and a.source_tasks == b.source_tasks
+        if a.kind == 'example':
+            assert b.text != a.text and mbuild.OBS_PREFIX in b.text
+            assert b.text.replace(b.text.split('```\n', 2)[1].split('\n')[0] + '\n', '', 1) == a.text
+        else:
+            assert b == a
+    assert "MySQL result: [(Decimal('6800'),)]" in new[0].text
+    assert new[0].text.index('```\nMySQL result:') < new[0].text.index('Action: Answer')
+    bad = copy.deepcopy(recs)
+    bad[0]['turns'][0]['content'] = 'SELECT other'
+    with pytest.raises(ValueError):
+        mbuild.with_example_observations(store.entries, bad, TASKS)
+
+
+def test_example_observations_multi_step_and_truncation():
+    t = DEV[0]
+    r = rec(t, 0, True, [op('UPDATE t SET a = 1', obs='[]'), op('SELECT a FROM t', obs='[' + '(1,), ' * 200 + ']'),
+                         ans('[(1,)]')])
+    base = mbuild.extract_examples([r], TASKS, max_answer_chars=50)
+    text = mbuild.with_example_observations(base, [r], TASKS, max_answer_chars=50)[0].text
+    assert text.count(mbuild.OBS_PREFIX) == 2 and 'MySQL result: []\n' in text and '...(truncated)' in text
+
+
+def test_obs_examples_config_differs_only_in_memory_store():
+    a = json.loads((ROOT / 'configs' / 'default.json').read_text(encoding='utf-8'))
+    b = json.loads((ROOT / 'configs' / 'obs_examples.json').read_text(encoding='utf-8'))
+    assert b['memory'].pop('store') != a['memory'].pop('store')
+    a.pop('_说明'); b.pop('_说明')
+    assert a == b
+
+
+def test_after_success_bundle_ablations_parse_and_only_change_after_success():
+    """诊断实验的整块删除条件不需要新代码：消融条件可列多组。"""
+    store = sample_store(DEV[:6])
+    for cond, groups in [('ablate:exp_top1+exp_rest@after_success', {'exp_top1', 'exp_rest'}),
+                         ('ablate:one_stmt+scope+fn_predicted+fn_other+schema+exp_top1+exp_rest+repair@after_success',
+                          {'one_stmt', 'scope', 'fn_predicted', 'fn_other', 'schema', 'exp_top1', 'exp_rest', 'repair'})]:
+        p = with_memory(AblationPolicy(*__import__('prism_thesis.prism.risk', fromlist=['x']).parse_ablation(cond)), store)
+        start(p, DEV[1])
+        assert p.name == cond
+        assert p.plan(S0).units == p.full_units() and p.plan(S_ERR).units == p.full_units()
+        dropped = p.full_units() - p.plan(S_OK).units
+        allg = p.static_groups()
+        assert dropped == frozenset().union(*(allg[g] for g in groups)) - CORE_IDS
+
+
+# ---- 补充实验：组合候选（PRISM-bundle） ----
+
+def test_solve_with_bundles_prefers_joint_bundle_when_single_risks_overflow():
+    values = {'a': 100, 'b': 100, 'c': 10}
+    risks = {'a': 6.0, 'b': 6.0, 'c': 1.0}
+    # 单组相加 12 > 8：只能删一组 + c；组合 {a,b} 的联合风险 5 → 删 a、b，再加 c
+    assert knapsack.solve(values, risks, 8.0) in ({'a', 'c'}, {'b', 'c'})
+    drop, chosen = knapsack.solve_with_bundles(values, risks, 8.0, {'AB': (frozenset({'a', 'b'}), 5.0)})
+    assert drop == {'a', 'b', 'c'} and chosen == ('AB',)
+    # 组合风险超出预算时不选
+    drop, chosen = knapsack.solve_with_bundles(values, risks, 8.0, {'AB': (frozenset({'a', 'b'}), 8.5)})
+    assert chosen == () and drop == knapsack.solve(values, risks, 8.0)
+
+
+def test_solve_with_bundles_never_picks_overlapping_bundles():
+    values = {'a': 50, 'b': 50, 'c': 50}
+    risks = {'a': 9.0, 'b': 9.0, 'c': 9.0}
+    bundles = {'AB': (frozenset({'a', 'b'}), 1.0), 'BC': (frozenset({'b', 'c'}), 1.0), 'C': (frozenset({'c'}), 1.0)}
+    drop, chosen = knapsack.solve_with_bundles(values, risks, 8.0, bundles)
+    assert drop == {'a', 'b', 'c'} and set(chosen) == {'AB', 'C'}
+
+
+def _bundle_records(tasks, drop_fail=()):
+    """full 与联合消融的配对记录：消融在 drop_fail 中的题目失败。每题都实际省略了单元（暴露）。"""
+    out = []
+    for t in tasks:
+        for rep in range(2):
+            for cond in ('full', 'ablate:exp_top1+exp_rest@after_success'):
+                r = rec(t, rep, not (cond != 'full' and t.task_id in drop_fail), [op('SELECT 1'), ans('[(1,)]')],
+                        cond=cond)
+                r['turns'][1]['plan_info'] = {'n_dropped_units': 3 if cond != 'full' else 0}
+                out.append(r)
+    return out
+
+
+def test_add_bundles_estimates_joint_risk_and_keeps_single_entries():
+    from prism_thesis.prism.risk import add_bundles
+    tasks = DEV[:40]
+    g = {t.task_id: t.group_id for t in TASKS.values()}
+    ty = {t.task_id: task_features(t).task_type for t in TASKS.values()}
+    base = table(7.0)
+    spec = {'B1': {'groups': ['exp_top1', 'exp_rest'], 'phase': 'after_success'}}
+    out = add_bundles(base, _bundle_records(tasks), spec, g, ty, b=200, min_exposed_groups=1)
+    assert all(out.entries[k] == v for k, v in base.entries.items())
+    assert out.lookup('B1', 'after_success', 'any') == 0.0 and out.bundles()['B1']['groups'] == ['exp_top1', 'exp_rest']
+    hurt = add_bundles(base, _bundle_records(tasks, {t.task_id for t in tasks[:10]}), spec, g, ty, b=200,
+                       min_exposed_groups=1)
+    assert hurt.lookup('B1', 'after_success', 'any') > 0
+    # 暴露不足 → 不写入
+    few = add_bundles(base, _bundle_records(tasks), spec, g, ty, b=200, min_exposed_groups=10 ** 6)
+    assert few.lookup('B1', 'after_success', 'any') is None
+    with pytest.raises(ValueError):
+        add_bundles(base, [r for r in _bundle_records(tasks) if r['condition'] == 'full'], spec, g, ty, b=50)
+
+
+def _bundle_table(single=9.0, bundle=2.0, phase='after_success'):
+    t = table(single)
+    t.meta['bundles'] = {'B': {'groups': ['schema', 'exp_top1', 'exp_rest'], 'phase': phase}}
+    for x in ('query', 'modify', 'any'):
+        t.entries[RiskTable.key('B', phase, x)] = bundle
+    return t
+
+
+def test_prism_bundle_drops_bundle_only_in_its_phase_and_respects_reinclusion():
+    store = sample_store(DEV[:6])
+    task = DEV[1]
+    counter = TokenCounter()
+    p = start(with_memory(PrismPolicy(_bundle_table(), 8, counter, layout='official', bundles=True), store), task)
+    plain = start(with_memory(PrismPolicy(_bundle_table(), 8, counter, layout='official'), store), task)
+    assert p.plan(S0).units == plain.plan(S0).units                    # 初始轮：组合不适用，与原 PRISM 相同
+    ok = p.plan(S_OK)
+    assert ok.info['bundles'] == ['B'] and 'schema' not in ok.units
+    assert not any(u.startswith('exp:x') for u in ok.units)          # 示例全部省略
+    assert 'schema' in plain.plan(S_OK).units                         # 原 PRISM：单组风险 9 > 8，不省略
+    # 出错（1054 → 补回 schema）后，组合含被强制保留的组，不可选
+    p2 = start(with_memory(PrismPolicy(_bundle_table(), 8, counter, layout='official', bundles=True), store), task)
+    p2.plan(S_ERR)
+    after = p2.plan(TurnState(2, 'after_success', ExecResult(True, '[(1,)]', None), 'SELECT 1'))
+    assert after.info['bundles'] == [] and 'schema' in after.units
+
+
+def test_prism_bundle_condition_uses_bundle_table_and_needs_official_layout():
+    from prism_thesis.config import table_key
+    assert table_key('prism-bundle@8') == 'risk_table_bundles' and table_key('prism@8') == 'risk_table'
+    with pytest.raises(ValueError):
+        PrismPolicy(_bundle_table(), 8, TokenCounter(), layout='tail', bundles=True)
+    cfg = load_config()
+    assert set(cfg['prism']['bundles']) == {'B1_examples', 'B2_schema_rules', 'B3_schema_examples', 'B4_all'}
+    assert all(b['phase'] == 'after_success' for b in cfg['prism']['bundles'].values())

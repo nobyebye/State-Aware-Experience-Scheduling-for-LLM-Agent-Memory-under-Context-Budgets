@@ -45,6 +45,10 @@ class RiskTable:
     def lookup(self, group: str, phase: str, task_type: str) -> Optional[float]:
         return self.entries.get(self.key(group, phase, task_type))
 
+    def bundles(self) -> dict[str, dict]:
+        """组合组：名称 → {'groups': [...], 'phase': 状态}（add_bundles 写入；没有时为空）。"""
+        return self.meta.get('bundles', {})
+
     def merge_map(self) -> dict[str, str]:
         """原组名 → 合并后的组名。"""
         out = {}
@@ -175,3 +179,42 @@ def estimate(records: Sequence[Mapping], group_of: Mapping[int, str], type_of: M
                 table.entries[RiskTable.key('+'.join(groups), phase, ttype)] = 100 * d.high
     table.meta['interactions'] = interactions
     return table
+
+
+def bundle_condition(groups: Sequence[str], phase: str) -> str:
+    return f"ablate:{'+'.join(groups)}@{phase}"
+
+
+def add_bundles(table: RiskTable, records: Sequence[Mapping], bundles: Mapping[str, Mapping],
+                group_of: Mapping[int, str], type_of: Mapping[int, str], control: str = 'full',
+                b: int = stats.B_DEFAULT, seed: int = 20261022, min_exposed_groups: int = 10) -> RiskTable:
+    """在已有风险表上加入组合组（补充实验 PRISM-bundle）。组合的风险直接由联合消融估计：
+    records 中条件 ablate:<组1>+…@<状态> 相对 control 的成功率下降的 95% 题目组 bootstrap 区间上界（百分点），
+    按任务类型分别估计，暴露题目组少于 min_exposed_groups 时不写入。原表的单组条目不变。
+    records 必须自带 control 的记录（与联合消融同一批运行，逐题配对）。"""
+    names = set(bundles)
+    clash = sorted(names & {k.split('|')[0] for k in table.entries})
+    if clash:
+        raise ValueError(f'组合名与已有组重名：{clash}')
+    if not any(r['condition'] == control for r in records):
+        raise ValueError(f'记录中没有对照条件 {control}')
+    entries = dict(table.entries)
+    cover, spec = {}, {}
+    for name, bd in sorted(bundles.items()):
+        groups, phase = list(bd['groups']), bd['phase']
+        cond = bundle_condition(groups, phase)
+        if not any(r['condition'] == cond for r in records):
+            raise ValueError(f'记录中没有组合 {name} 的联合消融 {cond}')
+        spec[name] = {'groups': groups, 'phase': phase, 'condition': cond}
+        for ttype in ('query', 'modify', ANY):
+            sub = [r for r in records if ttype == ANY or type_of[r['task_id']] == ttype]
+            d = stats.paired_difference(sub, control, cond, group_of, b=b, seed=seed)
+            paired = set(stats.per_task_mean(sub, control)) & set(stats.per_task_mean(sub, cond))
+            c = coverage(sub, cond, group_of, paired)
+            key = RiskTable.key(name, phase, ttype)
+            cover[key] = {**c, 'estimate_pp': 100 * d.estimate, 'low_pp': 100 * d.low, 'high_pp': 100 * d.high}
+            if c['exposed_groups'] >= min_exposed_groups:
+                entries[key] = 100 * d.high
+    meta = {**table.meta, 'bundles': spec, 'bundle_coverage': cover,
+            'bundle_settings': {'control': control, 'b': b, 'seed': seed, 'min_exposed_groups': min_exposed_groups}}
+    return RiskTable(entries, list(table.merged), meta)
