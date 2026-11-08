@@ -49,3 +49,35 @@ def greedy(values: Mapping[str, int], risks_pp: Mapping[str, float], epsilon_pp:
             chosen.append(g)
             used += w[g]
     return frozenset(chosen)
+
+
+def solve_with_bundles(values: Mapping[str, int], risks_pp: Mapping[str, float], epsilon_pp: float,
+                       bundles: Mapping[str, tuple], step: float = 0.5, solver=solve) -> tuple[frozenset, tuple]:
+    """带组合候选的选择（补充实验 PRISM-bundle）。bundles：名称 → (成员组集合, 风险)；成员组须在 values 中。
+    选中的候选（组合或单组）两两不含同一组：枚举两两不相交的组合子集，其余单组用 solver 求解，
+    取省略 token 最多者；同等时偏向更少的组合，再按名称排序。返回 (省略的组, 选中的组合名)。"""
+    capacity = max(0, math.floor(epsilon_pp / step + 1e-9))
+    names = sorted(bundles)
+    best = None
+    for mask in range(1 << len(names)):
+        chosen = [n for i, n in enumerate(names) if mask >> i & 1]
+        members: set = set()
+        ok = True
+        for n in chosen:
+            m = set(bundles[n][0])
+            if m & members:
+                ok = False
+                break
+            members |= m
+        if not ok:
+            continue
+        w = sum(weight(bundles[n][1], step) for n in chosen)
+        if w > capacity:
+            continue
+        rest = {g: values[g] for g in values if g not in members}
+        picked = solver(rest, {g: risks_pp[g] for g in rest}, (capacity - w) * step, step)
+        total = sum(values[g] for g in members) + sum(values[g] for g in picked)
+        key = (total, -len(chosen), tuple(sorted(chosen)))
+        if best is None or key[:2] > best[0][:2]:
+            best = (key, frozenset(members) | picked, tuple(chosen))
+    return best[1], best[2]

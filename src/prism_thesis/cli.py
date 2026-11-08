@@ -29,7 +29,8 @@ from pathlib import Path
 from . import stats
 from .checks import REHEARSAL_BANNER, check_records
 from .agent import build_messages, task_features
-from .config import ROOT, RehearsalArtifact, load_config, make_policy, make_retriever, memory_path, memory_settings
+from .config import (ROOT, RehearsalArtifact, load_config, make_policy, make_retriever, memory_path, memory_settings,
+                     table_path)
 from .data import load_tasks
 from .env import MySQLServer, TaskSession
 from .evaluate import match_direct
@@ -229,6 +230,41 @@ def cmd_risk_estimate(args, cfg):
     out.parent.mkdir(parents=True, exist_ok=True)
     table.save(out)
     print(f'风险表 {len(table.entries)} 项，合并组 {table.merged} → {out}')
+    return 0
+
+
+def cmd_add_bundles(args, cfg):
+    """补充实验 PRISM-bundle：在已有风险表上加入由联合消融估计的组合组（不花钱）。"""
+    from .prism.risk import RiskTable, add_bundles, bundle_condition
+    try:
+        recs = load_records([Path(p) for p in args.runs])
+    except ExperimentMismatch as e:
+        print(f'拒绝估计：{e}')
+        return 1
+    bundles = cfg['prism']['bundles']
+    if {r['split'] for r in recs} != {'development'}:
+        print(f"拒绝估计：组合风险只用开发集记录，输入中有 {sorted({r['split'] for r in recs})}")
+        return 1
+    src = Path(args.table) if args.table else table_path(cfg)
+    tasks = {t.task_id: t for t in load_tasks(include_excluded=True)}
+    type_of = {tid: task_features(t).task_type for tid, t in tasks.items()}
+    try:
+        table = add_bundles(RiskTable.load(src), recs, bundles, _groups(), type_of, b=cfg['stats']['bootstrap'],
+                            seed=cfg['stats']['seed'], min_exposed_groups=cfg['prism']['min_exposed_groups'])
+    except ValueError as e:
+        print(f'拒绝估计：{e}')
+        return 1
+    table.meta['bundle_source'] = {
+        'base_table': str(src), 'base_table_sha256': hashlib.sha256(src.read_bytes()).hexdigest(),
+        'runs': [{'path': str(p), 'sha256': hashlib.sha256(Path(p).read_bytes()).hexdigest()} for p in args.runs]}
+    for key, c in sorted(table.meta['bundle_coverage'].items()):
+        state = f"{table.entries[key]:.2f}" if key in table.entries else '暴露不足，不写入'
+        print(f"{key:42s} 下降 {c['estimate_pp']:+.2f}pp [{c['low_pp']:+.2f}, {c['high_pp']:+.2f}]  "
+              f"暴露 {c['exposed_groups']} 组  风险 {state}")
+    out = Path(args.out) if args.out else table_path(cfg, 'risk_table_bundles')
+    out.parent.mkdir(parents=True, exist_ok=True)
+    table.save(out)
+    print(f'风险表 {len(table.entries)} 项（含组合 {sorted(bundles)}）→ {out}')
     return 0
 
 
@@ -666,6 +702,10 @@ def main(argv=None) -> int:
     p.add_argument('--out', required=True)
     p.add_argument('--single-only', action='store_true')
     p.add_argument('--rehearsal', action='store_true', help='演练：只做一致性检查，结果不得用于冻结或论文')
+    p = sub.add_parser('add-bundles', help='补充实验：风险表加入由联合消融估计的组合组（不花钱）')
+    p.add_argument('--runs', nargs='+', required=True, help='开发集上 full 与组合联合消融的记录')
+    p.add_argument('--table', help='默认为配置中的 prism.risk_table')
+    p.add_argument('--out', help='默认为配置中的 prism.risk_table_bundles')
     p = sub.add_parser('accept-fingerprints', help='登记已完成正式记录的指纹，代码更新后仍可比较')
     p.add_argument('--runs', nargs='+', required=True)
     p = sub.add_parser('calibrate')

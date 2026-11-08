@@ -15,6 +15,7 @@
   prism-singleonly@ε           消融：只用单独留一的风险估计（不做互补合并）
   prism-nosig@ε                消融：出错后不按错误签名检索修复经验，只补回指令
   prism-greedy@ε               消融：贪心代替精确求解
+  prism-bundle@ε               补充实验：风险表加入由联合消融估计的组合组（成功执行后的整块省略），与单组一起选择
   ablate:<组>[+<组>]@<状态>     风险估计用的分层留一消融（组可以是指令组或经验组）
 任何条件后可加检索条数修饰 #k=N（如 full#k=5、prism@4#k=1），覆盖 memory.k_examples，用于 k 的敏感性实验。
 """
@@ -100,6 +101,8 @@ def table_key(condition: str) -> str | None:
     name = split_condition(condition)[0].partition('@')[0]
     if name == 'prism-singleonly':
         return 'risk_table_single_only'
+    if name == 'prism-bundle':
+        return 'risk_table_bundles'
     if name in ('static', 'prism', 'prism-stateless', 'prism-norecovery', 'prism-tail', 'prism-tailsys', 'prism-nosig',
                 'prism-greedy'):
         return 'risk_table'
@@ -169,6 +172,8 @@ def _make_base_policy(condition: str, cfg: dict, counter: TokenCounter):
         p = PrismPolicy(_table(cfg, 'risk_table_single_only'), eps, counter, step, layout='official')
     elif name == 'prism-nosig':
         p = PrismPolicy(_table(cfg), eps, counter, step, signature=False, layout='official')
+    elif name == 'prism-bundle':
+        p = PrismPolicy(_table(cfg, 'risk_table_bundles'), eps, counter, step, layout='official', bundles=True)
     elif name == 'prism-greedy':
         p = PrismPolicy(_table(cfg), eps, counter, step, greedy=True, layout='official')
     else:

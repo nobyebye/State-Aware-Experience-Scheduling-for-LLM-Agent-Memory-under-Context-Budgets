@@ -41,6 +41,36 @@ def select(groups, values, table: RiskTable, phase: str, task_type: str, epsilon
     return solver({g: values[g] for g in candidates}, risks, epsilon, step)
 
 
+def select_bundles(groups, values, table: RiskTable, phase: str, task_type: str, epsilon: float, step: float,
+                   forced: frozenset = frozenset(), solver=knapsack.solve) -> Optional[tuple[frozenset, tuple]]:
+    """补充实验 PRISM-bundle：在 select 的基础上加入风险表中的组合组作为候选。
+    单组风险缺项时与 select 相同，返回 None（该轮发送全部单元）。组合只在其状态下、风险表有该任务类型的
+    条目时可选；成员组按互补合并关系换名，只计本轮实际存在的组；任一成员被补回强制保留时不可选。
+    返回 (省略的组, 选中的组合名)。"""
+    candidates = [g for g in groups if g not in forced]
+    risks = {}
+    for g in candidates:
+        r = table.lookup(g, phase, task_type)
+        if r is None:
+            return None
+        risks[g] = r
+    mm = table.merge_map()
+    options = {}
+    for name, spec in table.bundles().items():
+        if spec['phase'] != phase:
+            continue
+        r = table.lookup(name, phase, task_type)
+        if r is None:
+            continue
+        members = {mm.get(g, g) for g in spec['groups']}
+        if members & set(forced):
+            continue
+        members &= set(candidates)
+        if members:
+            options[name] = (frozenset(members), r)
+    return knapsack.solve_with_bundles({g: values[g] for g in candidates}, risks, epsilon, options, step, solver)
+
+
 class PrismPolicy(Policy):
     """PRISM：每轮的候选单元 = 指令单元 ∪ 按状态检索的经验（任务开始时的相似示例与洞见；出错后按错误签名
     检索的修复经验，单调累积）。每轮按状态与任务类型查风险表，在风险预算 ε 内用 0-1 背包选出省略 token 最多
@@ -54,7 +84,10 @@ class PrismPolicy(Policy):
     def __init__(self, table: RiskTable, epsilon: float, counter: TokenCounter, step: float = 0.5,
                  stateless: bool = False, recovery: bool = True, tail_in_system: bool = False,
                  signature: bool = True, greedy: bool = False, name: Optional[str] = None,
-                 layout: str = 'tail'):
+                 layout: str = 'tail', bundles: bool = False):
+        if bundles and (layout != 'official' or stateless):
+            raise ValueError('组合候选只用于正式布局、区分状态的 PRISM')
+        self.bundles = bundles
         if layout not in ('tail', 'official'):
             raise ValueError(f'未知布局：{layout}')
         if layout == 'official' and tail_in_system:
@@ -83,9 +116,16 @@ class PrismPolicy(Policy):
         values = group_tokens(groups, self.task, self.counter, self.store)
         phase = ANY if self.stateless else state.phase
         solver = knapsack.greedy if self.greedy else knapsack.solve
-        drop = select(groups, values, self.table, phase, self.features.task_type,
-                      self.epsilon, self.step, self.reincluded, solver)
         info = {'phase': phase, 'reincluded': sorted(self.reincluded), 'n_repairs': len(repairs)}
+        if self.bundles:
+            picked = select_bundles(groups, values, self.table, phase, self.features.task_type,
+                                    self.epsilon, self.step, self.reincluded, solver)
+            drop = None if picked is None else picked[0]
+            if picked is not None:
+                info['bundles'] = list(picked[1])
+        else:
+            drop = select(groups, values, self.table, phase, self.features.task_type,
+                          self.epsilon, self.step, self.reincluded, solver)
         exp_units = frozenset(u for g, us in groups.items() for u in us if is_exp(u))
         if self.layout == 'official':
             if drop is None:              # 风险表缺项：全部发送
