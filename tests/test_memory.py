@@ -613,3 +613,45 @@ def test_prism_bundle_condition_uses_bundle_table_and_needs_official_layout():
     cfg = load_config()
     assert set(cfg['prism']['bundles']) == {'B1_examples', 'B2_schema_rules', 'B3_schema_examples', 'B4_all'}
     assert all(b['phase'] == 'after_success' for b in cfg['prism']['bundles'].values())
+
+
+# ---- PRISM-JS（联合删除搜索）----
+
+def test_joint_policy_reference_matches_phase_switch_candidates():
+    from prism_thesis.policies.joint import JointPolicy
+    store = sample_store(insights=[insight('in-0-0', 'Check results.', 'any', DEV[40])])
+    ref = start(with_memory(JointPolicy({}, 'js-ref'), store))
+    ps = start(with_memory(PhaseSwitchPolicy(), store))
+    init = ref.plan(S0).prefix
+    assert ALL_IDS <= init and not any(u.startswith('exp:r') for u in init)
+    assert {u for u in init if is_exp(u)} == {u for u in ps.plan(S0).prefix if is_exp(u)}
+    err = ref.plan(S_ERR).prefix
+    assert ALL_IDS <= err and any(u.startswith('exp:r') for u in err)
+
+
+def test_joint_policy_drops_whole_set_only_in_its_phase_and_respects_recovery():
+    from prism_thesis.policies.joint import JointPolicy
+    store = sample_store(insights=[insight('in-0-0', 'Check results.', 'any', DEV[40])])
+    p = start(with_memory(JointPolicy.search(('schema', 'exp_top1', 'exp_rest'), 'after_success', 'x'), store))
+    assert 'schema' in p.plan(S0).prefix
+    ok = p.plan(S_OK).prefix
+    assert 'schema' not in ok and not any(u.startswith('exp:x') for u in ok)
+    assert any(u.startswith('exp:i') for u in ok) and CORE_IDS <= ok
+    q = start(with_memory(JointPolicy.search(('schema',), 'after_success', 'y'), store))
+    q.plan(S0)
+    q.plan(S_ERR)                       # error 1054 restores the schema for the rest of the episode
+    assert 'schema' in q.plan(S_OK).prefix
+
+
+def test_js_condition_names(tmp_path):
+    import json as _json
+    from prism_thesis.config import make_policy
+    cfg = mem_cfg(tmp_path)
+    tbl = tmp_path / 'js.json'
+    tbl.write_text(_json.dumps({'family': {'8': {'after_success|query': ['schema'], 'initial|modify': ['fn_other']}}}))
+    cfg['prism']['js_table'] = str(tbl)
+    p = make_policy('js@8', cfg, COUNTER)
+    assert p.spec[('after_success', 'query')] == ('schema',) and p.name == 'js@8'
+    assert make_policy('js-abl:exp_rest+exp_top1@after_success', cfg, COUNTER).spec[('after_success', 'modify')] \
+        == ('exp_rest', 'exp_top1')
+    assert make_policy('js-ref', cfg, COUNTER).spec == {}

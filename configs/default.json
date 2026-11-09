@@ -29,6 +29,7 @@
     "risk_table": "results/risk/risk_table.json",
     "risk_table_single_only": "results/risk/risk_table_single_only.json",
     "risk_table_bundles": "results/risk/risk_table_bundles.json",
+    "js_table": "results/js/js_table.json",
     "_bundles说明": "补充实验 PRISM-bundle（docs/补充实验_组合候选_预先登记_20261108.md）：组合组的成员与状态；风险由 add-bundles 从开发集联合消融估计。",
     "bundles": {
       "B1_examples": {"groups": ["exp_top1", "exp_rest"], "phase": "after_success"},

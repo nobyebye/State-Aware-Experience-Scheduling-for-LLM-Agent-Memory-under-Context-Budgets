@@ -17,6 +17,9 @@
   prism-greedy@ε               消融：贪心代替精确求解
   prism-bundle@ε               补充实验：风险表加入由联合消融估计的组合组（成功执行后的整块省略），与单组一起选择
   ablate:<组>[+<组>]@<状态>     风险估计用的分层留一消融（组可以是指令组或经验组）
+  js-ref                       PRISM-JS 搜索的参照：状态感知检索，不省略任何组
+  js-abl:<组>[+<组>]@<状态>     PRISM-JS 搜索：状态感知检索下，只在该状态整组省略（联合损失整体实测）
+  js@λ                         PRISM-JS：按 prism.js_table 中 λ 档的 (状态, 任务类型) → 省略方案执行
 任何条件后可加检索条数修饰 #k=N（如 full#k=5、prism@4#k=1），覆盖 memory.k_examples，用于 k 的敏感性实验。
 """
 from __future__ import annotations
@@ -27,6 +30,7 @@ from pathlib import Path
 from .memory import MemoryStore, Retriever
 from .policies import (AblationPolicy, FullPolicy, PhaseSwitchPolicy, PrismPolicy, RandomDropPolicy,
                        StaticPolicy)
+from .policies.joint import JointPolicy
 from .prism.risk import RiskTable, parse_ablation
 from .prompts import set_prompt_options, set_variant
 from .tokens import TokenCounter
@@ -99,6 +103,8 @@ def make_retriever(cfg: dict, settings: dict, allow_rehearsal: bool = False) -> 
 def table_key(condition: str) -> str | None:
     """该条件使用的风险表在 cfg['prism'] 中的键；不使用风险表时为 None。"""
     name = split_condition(condition)[0].partition('@')[0]
+    if name == 'js':
+        return 'js_table'
     if name == 'prism-singleonly':
         return 'risk_table_single_only'
     if name == 'prism-bundle':
@@ -112,6 +118,16 @@ def table_key(condition: str) -> str | None:
 def table_path(cfg: dict, key: str = 'risk_table') -> Path:
     p = Path(cfg['prism'][key])
     return p if p.is_absolute() else ROOT / p
+
+
+def load_js_table(cfg: dict, level: str) -> dict:
+    """PRISM-JS 策略族：{"family": {"<λ>": {"<状态>|<任务类型>": [组, ...]}}}。"""
+    data = json.loads(table_path(cfg, 'js_table').read_text(encoding='utf-8'))
+    fam = data['family']
+    key = next((k for k in fam if float(k) == float(level)), None)
+    if key is None:
+        raise ValueError(f'js_table 中没有 λ={level}（可选：{sorted(fam, key=float)}）')
+    return {tuple(k.split('|')): tuple(v) for k, v in fam[key].items()}
 
 
 def _table(cfg: dict, key: str = 'risk_table') -> RiskTable:
@@ -152,6 +168,13 @@ def _make_base_policy(condition: str, cfg: dict, counter: TokenCounter):
     ab = parse_ablation(condition)
     if ab:
         return AblationPolicy(*ab)
+    if condition == 'js-ref':
+        return JointPolicy({}, 'js-ref')
+    if condition.startswith('js-abl:'):
+        body, _, phase = condition[len('js-abl:'):].rpartition('@')
+        return JointPolicy.search(tuple(body.split('+')), phase, condition)
+    if condition.startswith('js@'):
+        return JointPolicy(load_js_table(cfg, condition[3:]), condition)
     name, _, eps = condition.partition('@')
     if not eps:
         raise ValueError(f'未知条件：{condition}')
