@@ -38,6 +38,7 @@ while [ ! -f results/js/formal_test_report.txt ]; do
   fi
   sleep 300
 done
+push_reports    # formal results first, so they can be read before the transfer finishes
 L=$(cat results/js/lambda_star.txt 2>/dev/null || echo 8); [ "$L" = "none" ] && L=8
 echo "== transfer (70B): search on dev $(date -u +%FT%TZ)"
 SEARCH=$(python -c "import sys; sys.path.insert(0,'analysis'); from js_search import conditions; print(','.join(conditions()))")
