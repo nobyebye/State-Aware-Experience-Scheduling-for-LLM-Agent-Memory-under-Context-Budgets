@@ -40,7 +40,13 @@ def main():
     ap.add_argument('--runs', required=True)
     ap.add_argument('--lambda-out', required=True)
     ap.add_argument('--delta', type=float, default=5.0)
+    ap.add_argument('--sequence', help='comma-separated λ values to test in order (default 2,4,8,16)')
+    ap.add_argument('--others', help='comma-separated conditions reported outside the sequence '
+                                     '(default js-ref,phase_switch; empty string for none)')
     a = ap.parse_args()
+    seq = [float(x) for x in a.sequence.split(',')] if a.sequence else SEQUENCE
+    seq = [int(x) if float(x).is_integer() else x for x in seq]
+    others = OTHERS if a.others is None else [c for c in a.others.split(',') if c]
     recs = load(a.runs)
     calib = set(json.loads(Path('configs/pilot_split.json').read_text())['calibration_task_ids'])
     if {r['task_id'] for r in recs} - calib:
@@ -52,7 +58,7 @@ def main():
     tok_full = sum(r['input_tokens'] for r in by['full']) / len(by['full'])
     print(f"calibration half: {len({r['task_id'] for r in recs})} tasks")
     print(f"{'condition':14s} {'runs':>5s} {'succ':>6s} {'tok':>6s} {'save':>6s}  diff vs full (95% CI)")
-    for c in ['full'] + OTHERS + [f'js@{l}' for l in SEQUENCE]:
+    for c in ['full'] + others + [f'js@{l}' for l in seq]:
         rs = by.get(c)
         if not rs:
             print(f'{c:14s} missing')
@@ -62,13 +68,13 @@ def main():
         ds = '' if c == 'full' else f'{100 * d.estimate:+.2f} [{100 * d.low:+.2f}, {100 * d.high:+.2f}]'
         print(f"{c:14s} {len(rs):5d} {100 * sum(r['success'] for r in rs) / len(rs):5.1f}% {tok:6.0f} "
               f"{100 * (1 - tok / tok_full):5.1f}%  {ds}")
-    best, steps = stats.fixed_sequence(recs, [(l, f'js@{l}') for l in SEQUENCE], 'full', group_of,
+    best, steps = stats.fixed_sequence(recs, [(l, f'js@{l}') for l in seq], 'full', group_of,
                                        a.delta / 100, b=10000, seed=20261022)
     print('\nfixed sequence (delta = %.1fpp):' % a.delta)
     for s in steps:
         print(f'  λ={s.epsilon:g}: {100 * s.diff.estimate:+.2f} [{100 * s.diff.low:+.2f}, {100 * s.diff.high:+.2f}] '
               f"{'pass' if s.passed else 'FAIL (stop)'}")
-    for c in OTHERS:
+    for c in others:
         d = stats.paired_difference(recs, c, 'full', group_of, b=10000, seed=20261022)
         print(f"  {c} (reported, not in sequence): {'pass' if stats.noninferior(d, a.delta / 100) else 'fail'}")
     print(f'λ* = {best if best is not None else "none (fall back to full)"}')
