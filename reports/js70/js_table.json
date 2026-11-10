@@ -1,0 +1,820 @@
+{
+ "meta": {
+  "paths": {
+   "initial": [
+    [
+     "fn_other"
+    ],
+    [
+     "answer_query",
+     "empty_scalar"
+    ],
+    [
+     "insight"
+    ],
+    [
+     "observe",
+     "rounds",
+     "modify_answer"
+    ],
+    [
+     "exp_rest"
+    ]
+   ],
+   "after_success": [
+    [
+     "exp_rest"
+    ],
+    [
+     "exp_top1"
+    ],
+    [
+     "fn_other",
+     "fn_predicted"
+    ],
+    [
+     "schema",
+     "one_stmt",
+     "scope"
+    ],
+    [
+     "insight"
+    ],
+    [
+     "observe",
+     "rounds",
+     "modify_answer"
+    ],
+    [
+     "answer_query",
+     "empty_scalar"
+    ]
+   ]
+  },
+  "lambdas": [
+   2,
+   4,
+   6,
+   8,
+   10,
+   12,
+   16
+  ],
+  "b": 10000,
+  "seed": 20261022,
+  "runs": [
+   "results/js70/search.jsonl"
+  ],
+  "n_records": 4290
+ },
+ "strata": {
+  "initial|query": [
+   {
+    "step": 0,
+    "groups": [],
+    "loss": 0.0,
+    "upper": 0.0,
+    "save": 0.0
+   },
+   {
+    "step": 1,
+    "groups": [
+     "fn_other"
+    ],
+    "loss": 2.164502164502165,
+    "upper": 6.666666666666668,
+    "save": 73.50649350649351,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 2,
+    "groups": [
+     "fn_other",
+     "answer_query",
+     "empty_scalar"
+    ],
+    "loss": 2.1645021645021645,
+    "upper": 6.103286384976527,
+    "save": 104.9090909090909,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 3,
+    "groups": [
+     "fn_other",
+     "answer_query",
+     "empty_scalar",
+     "insight"
+    ],
+    "loss": 0.865800865800866,
+    "upper": 4.761904761904762,
+    "save": 205.008658008658,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 4,
+    "groups": [
+     "fn_other",
+     "answer_query",
+     "empty_scalar",
+     "insight",
+     "observe",
+     "rounds",
+     "modify_answer"
+    ],
+    "loss": 0.0,
+    "upper": 3.1111111111111107,
+    "save": 226.41125541125544,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 5,
+    "groups": [
+     "fn_other",
+     "answer_query",
+     "empty_scalar",
+     "insight",
+     "observe",
+     "rounds",
+     "modify_answer",
+     "exp_rest"
+    ],
+    "loss": 2.164502164502165,
+    "upper": 5.472636815920398,
+    "save": 524.7402597402597,
+    "n_tasks": 77,
+    "n_groups": 48
+   }
+  ],
+  "after_success|query": [
+   {
+    "step": 0,
+    "groups": [],
+    "loss": 0.0,
+    "upper": 0.0,
+    "save": 0.0
+   },
+   {
+    "step": 1,
+    "groups": [
+     "exp_rest"
+    ],
+    "loss": 1.7316017316017311,
+    "upper": 7.292023401826479,
+    "save": 304.32034632034635,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 2,
+    "groups": [
+     "exp_rest",
+     "exp_top1"
+    ],
+    "loss": 2.164502164502165,
+    "upper": 7.143497183819757,
+    "save": 452.2077922077922,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 3,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted"
+    ],
+    "loss": 4.761904761904761,
+    "upper": 10.112715118759773,
+    "save": 531.2164502164503,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 4,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted",
+     "schema",
+     "one_stmt",
+     "scope"
+    ],
+    "loss": 6.493506493506493,
+    "upper": 13.02723638180909,
+    "save": 612.961038961039,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 5,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted",
+     "schema",
+     "one_stmt",
+     "scope",
+     "insight"
+    ],
+    "loss": 12.554112554112557,
+    "upper": 20.45473297329733,
+    "save": 715.9350649350649,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 6,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted",
+     "schema",
+     "one_stmt",
+     "scope",
+     "insight",
+     "observe",
+     "rounds",
+     "modify_answer"
+    ],
+    "loss": 6.926406926406926,
+    "upper": 11.594202898550723,
+    "save": 738.5714285714286,
+    "n_tasks": 77,
+    "n_groups": 48
+   },
+   {
+    "step": 7,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted",
+     "schema",
+     "one_stmt",
+     "scope",
+     "insight",
+     "observe",
+     "rounds",
+     "modify_answer",
+     "answer_query",
+     "empty_scalar"
+    ],
+    "loss": 26.83982683982684,
+    "upper": 35.35384331116039,
+    "save": 780.7229437229438,
+    "n_tasks": 77,
+    "n_groups": 48
+   }
+  ],
+  "initial|modify": [
+   {
+    "step": 0,
+    "groups": [],
+    "loss": 0.0,
+    "upper": 0.0,
+    "save": 0.0
+   },
+   {
+    "step": 1,
+    "groups": [
+     "fn_other"
+    ],
+    "loss": 0.0,
+    "upper": 0.0,
+    "save": 74.01010101010101,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 2,
+    "groups": [
+     "fn_other",
+     "answer_query",
+     "empty_scalar"
+    ],
+    "loss": 1.01010101010101,
+    "upper": 10.0,
+    "save": 133.4545454545455,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 3,
+    "groups": [
+     "fn_other",
+     "answer_query",
+     "empty_scalar",
+     "insight"
+    ],
+    "loss": 1.6821560979169038e-16,
+    "upper": 3.3333333333333335,
+    "save": 242.79797979797982,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 4,
+    "groups": [
+     "fn_other",
+     "answer_query",
+     "empty_scalar",
+     "insight",
+     "observe",
+     "rounds",
+     "modify_answer"
+    ],
+    "loss": 1.6821560979169038e-16,
+    "upper": 3.3333333333333335,
+    "save": 303.2828282828283,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 5,
+    "groups": [
+     "fn_other",
+     "answer_query",
+     "empty_scalar",
+     "insight",
+     "observe",
+     "rounds",
+     "modify_answer",
+     "exp_rest"
+    ],
+    "loss": 1.0101010101010104,
+    "upper": 7.070707070707072,
+    "save": 533.7272727272727,
+    "n_tasks": 33,
+    "n_groups": 19
+   }
+  ],
+  "after_success|modify": [
+   {
+    "step": 0,
+    "groups": [],
+    "loss": 0.0,
+    "upper": 0.0,
+    "save": 0.0
+   },
+   {
+    "step": 1,
+    "groups": [
+     "exp_rest"
+    ],
+    "loss": 0.0,
+    "upper": 5.333333333333334,
+    "save": 222.66666666666666,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 2,
+    "groups": [
+     "exp_rest",
+     "exp_top1"
+    ],
+    "loss": 0.0,
+    "upper": 5.333333333333334,
+    "save": 346.93939393939394,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 3,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted"
+    ],
+    "loss": -2.0202020202020203,
+    "upper": 0.0,
+    "save": 423.969696969697,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 4,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted",
+     "schema",
+     "one_stmt",
+     "scope"
+    ],
+    "loss": 0.0,
+    "upper": 6.451612903225806,
+    "save": 472.79797979797974,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 5,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted",
+     "schema",
+     "one_stmt",
+     "scope",
+     "insight"
+    ],
+    "loss": 1.01010101010101,
+    "upper": 8.333333333333332,
+    "save": 602.1717171717172,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 6,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted",
+     "schema",
+     "one_stmt",
+     "scope",
+     "insight",
+     "observe",
+     "rounds",
+     "modify_answer"
+    ],
+    "loss": -1.0101010101010102,
+    "upper": 3.1746031746031753,
+    "save": 615.3030303030303,
+    "n_tasks": 33,
+    "n_groups": 19
+   },
+   {
+    "step": 7,
+    "groups": [
+     "exp_rest",
+     "exp_top1",
+     "fn_other",
+     "fn_predicted",
+     "schema",
+     "one_stmt",
+     "scope",
+     "insight",
+     "observe",
+     "rounds",
+     "modify_answer",
+     "answer_query",
+     "empty_scalar"
+    ],
+    "loss": -1.0101010101010102,
+    "upper": 3.1746031746031753,
+    "save": 664.3333333333334,
+    "n_tasks": 33,
+    "n_groups": 19
+   }
+  ]
+ },
+ "chosen": {
+  "2": {
+   "query": {
+    "initial_step": 0,
+    "after_success_step": 0,
+    "upper_sum": 0.0,
+    "save": 0.0
+   },
+   "modify": {
+    "initial_step": 1,
+    "after_success_step": 3,
+    "upper_sum": 0.0,
+    "save": 497.97979797979804
+   }
+  },
+  "4": {
+   "query": {
+    "initial_step": 4,
+    "after_success_step": 0,
+    "upper_sum": 3.1111111111111107,
+    "save": 226.41125541125544
+   },
+   "modify": {
+    "initial_step": 1,
+    "after_success_step": 7,
+    "upper_sum": 3.1746031746031753,
+    "save": 738.3434343434344
+   }
+  },
+  "6": {
+   "query": {
+    "initial_step": 5,
+    "after_success_step": 0,
+    "upper_sum": 5.472636815920398,
+    "save": 524.7402597402597
+   },
+   "modify": {
+    "initial_step": 1,
+    "after_success_step": 7,
+    "upper_sum": 3.1746031746031753,
+    "save": 738.3434343434344
+   }
+  },
+  "8": {
+   "query": {
+    "initial_step": 5,
+    "after_success_step": 0,
+    "upper_sum": 5.472636815920398,
+    "save": 524.7402597402597
+   },
+   "modify": {
+    "initial_step": 4,
+    "after_success_step": 7,
+    "upper_sum": 6.507936507936509,
+    "save": 967.6161616161617
+   }
+  },
+  "10": {
+   "query": {
+    "initial_step": 5,
+    "after_success_step": 0,
+    "upper_sum": 5.472636815920398,
+    "save": 524.7402597402597
+   },
+   "modify": {
+    "initial_step": 4,
+    "after_success_step": 7,
+    "upper_sum": 6.507936507936509,
+    "save": 967.6161616161617
+   }
+  },
+  "12": {
+   "query": {
+    "initial_step": 0,
+    "after_success_step": 6,
+    "upper_sum": 11.594202898550723,
+    "save": 738.5714285714286
+   },
+   "modify": {
+    "initial_step": 5,
+    "after_success_step": 7,
+    "upper_sum": 10.245310245310247,
+    "save": 1198.060606060606
+   }
+  },
+  "16": {
+   "query": {
+    "initial_step": 5,
+    "after_success_step": 3,
+    "upper_sum": 15.585351934680173,
+    "save": 1055.95670995671
+   },
+   "modify": {
+    "initial_step": 5,
+    "after_success_step": 7,
+    "upper_sum": 10.245310245310247,
+    "save": 1198.060606060606
+   }
+  }
+ },
+ "family": {
+  "2": {
+   "initial|query": [],
+   "after_success|query": [],
+   "initial|modify": [
+    "fn_other"
+   ],
+   "after_success|modify": [
+    "exp_rest",
+    "exp_top1",
+    "fn_other",
+    "fn_predicted"
+   ]
+  },
+  "4": {
+   "initial|query": [
+    "fn_other",
+    "answer_query",
+    "empty_scalar",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer"
+   ],
+   "after_success|query": [],
+   "initial|modify": [
+    "fn_other"
+   ],
+   "after_success|modify": [
+    "exp_rest",
+    "exp_top1",
+    "fn_other",
+    "fn_predicted",
+    "schema",
+    "one_stmt",
+    "scope",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "answer_query",
+    "empty_scalar"
+   ]
+  },
+  "6": {
+   "initial|query": [
+    "fn_other",
+    "answer_query",
+    "empty_scalar",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "exp_rest"
+   ],
+   "after_success|query": [],
+   "initial|modify": [
+    "fn_other"
+   ],
+   "after_success|modify": [
+    "exp_rest",
+    "exp_top1",
+    "fn_other",
+    "fn_predicted",
+    "schema",
+    "one_stmt",
+    "scope",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "answer_query",
+    "empty_scalar"
+   ]
+  },
+  "8": {
+   "initial|query": [
+    "fn_other",
+    "answer_query",
+    "empty_scalar",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "exp_rest"
+   ],
+   "after_success|query": [],
+   "initial|modify": [
+    "fn_other",
+    "answer_query",
+    "empty_scalar",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer"
+   ],
+   "after_success|modify": [
+    "exp_rest",
+    "exp_top1",
+    "fn_other",
+    "fn_predicted",
+    "schema",
+    "one_stmt",
+    "scope",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "answer_query",
+    "empty_scalar"
+   ]
+  },
+  "10": {
+   "initial|query": [
+    "fn_other",
+    "answer_query",
+    "empty_scalar",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "exp_rest"
+   ],
+   "after_success|query": [],
+   "initial|modify": [
+    "fn_other",
+    "answer_query",
+    "empty_scalar",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer"
+   ],
+   "after_success|modify": [
+    "exp_rest",
+    "exp_top1",
+    "fn_other",
+    "fn_predicted",
+    "schema",
+    "one_stmt",
+    "scope",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "answer_query",
+    "empty_scalar"
+   ]
+  },
+  "12": {
+   "initial|query": [],
+   "after_success|query": [
+    "exp_rest",
+    "exp_top1",
+    "fn_other",
+    "fn_predicted",
+    "schema",
+    "one_stmt",
+    "scope",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer"
+   ],
+   "initial|modify": [
+    "fn_other",
+    "answer_query",
+    "empty_scalar",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "exp_rest"
+   ],
+   "after_success|modify": [
+    "exp_rest",
+    "exp_top1",
+    "fn_other",
+    "fn_predicted",
+    "schema",
+    "one_stmt",
+    "scope",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "answer_query",
+    "empty_scalar"
+   ]
+  },
+  "16": {
+   "initial|query": [
+    "fn_other",
+    "answer_query",
+    "empty_scalar",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "exp_rest"
+   ],
+   "after_success|query": [
+    "exp_rest",
+    "exp_top1",
+    "fn_other",
+    "fn_predicted"
+   ],
+   "initial|modify": [
+    "fn_other",
+    "answer_query",
+    "empty_scalar",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "exp_rest"
+   ],
+   "after_success|modify": [
+    "exp_rest",
+    "exp_top1",
+    "fn_other",
+    "fn_predicted",
+    "schema",
+    "one_stmt",
+    "scope",
+    "insight",
+    "observe",
+    "rounds",
+    "modify_answer",
+    "answer_query",
+    "empty_scalar"
+   ]
+  }
+ }
+}

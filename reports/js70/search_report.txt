@@ -1,0 +1,36 @@
+stratum                    step    loss   U97.5   save  omitted
+initial|query                 1   +2.16   +6.67     74  fn_other
+initial|query                 2   +2.16   +6.10    105  fn_other+answer_query+empty_scalar
+initial|query                 3   +0.87   +4.76    205  fn_other+answer_query+empty_scalar+insight
+initial|query                 4   +0.00   +3.11    226  fn_other+answer_query+empty_scalar+insight+observe+rounds+modify_answer
+initial|query                 5   +2.16   +5.47    525  fn_other+answer_query+empty_scalar+insight+observe+rounds+modify_answer+exp_rest
+after_success|query           1   +1.73   +7.29    304  exp_rest
+after_success|query           2   +2.16   +7.14    452  exp_rest+exp_top1
+after_success|query           3   +4.76  +10.11    531  exp_rest+exp_top1+fn_other+fn_predicted
+after_success|query           4   +6.49  +13.03    613  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope
+after_success|query           5  +12.55  +20.45    716  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight
+after_success|query           6   +6.93  +11.59    739  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight+observe+rounds+modify_answer
+after_success|query           7  +26.84  +35.35    781  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight+observe+rounds+modify_answer+answer_query+empty_scalar
+initial|modify                1   +0.00   +0.00     74  fn_other
+initial|modify                2   +1.01  +10.00    133  fn_other+answer_query+empty_scalar
+initial|modify                3   +0.00   +3.33    243  fn_other+answer_query+empty_scalar+insight
+initial|modify                4   +0.00   +3.33    303  fn_other+answer_query+empty_scalar+insight+observe+rounds+modify_answer
+initial|modify                5   +1.01   +7.07    534  fn_other+answer_query+empty_scalar+insight+observe+rounds+modify_answer+exp_rest
+after_success|modify          1   +0.00   +5.33    223  exp_rest
+after_success|modify          2   +0.00   +5.33    347  exp_rest+exp_top1
+after_success|modify          3   -2.02   +0.00    424  exp_rest+exp_top1+fn_other+fn_predicted
+after_success|modify          4   +0.00   +6.45    473  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope
+after_success|modify          5   +1.01   +8.33    602  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight
+after_success|modify          6   -1.01   +3.17    615  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight+observe+rounds+modify_answer
+after_success|modify          7   -1.01   +3.17    664  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight+observe+rounds+modify_answer+answer_query+empty_scalar
+
+family (task type: initial step / after-success step, summed upper bound, est. saving per task):
+  λ= 2  query: 0/0 U=0.0 save≈0   modify: 1/3 U=0.0 save≈498
+  λ= 4  query: 4/0 U=3.1 save≈226   modify: 1/7 U=3.2 save≈738
+  λ= 6  query: 5/0 U=5.5 save≈525   modify: 1/7 U=3.2 save≈738
+  λ= 8  query: 5/0 U=5.5 save≈525   modify: 4/7 U=6.5 save≈968
+  λ=10  query: 5/0 U=5.5 save≈525   modify: 4/7 U=6.5 save≈968
+  λ=12  query: 0/6 U=11.6 save≈739   modify: 5/7 U=10.2 save≈1198
+  λ=16  query: 5/3 U=15.6 save≈1056   modify: 5/7 U=10.2 save≈1198
+
+written results/js70/js_table.json

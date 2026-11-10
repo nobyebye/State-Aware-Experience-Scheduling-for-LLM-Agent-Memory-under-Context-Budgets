@@ -1,0 +1,18 @@
+calibration half: 203 tasks
+condition       runs   succ    tok   save  diff vs full (95% CI)
+full            2030  72.5%   2567   0.0%  
+js-ref          2030  72.3%   2094  18.4%  -0.15 [-3.98, +3.65]
+phase_switch    2030  73.8%   1415  44.9%  +1.38 [-2.87, +5.64]
+js@2            2030  74.6%   1309  49.0%  +2.17 [-2.18, +6.58]
+js@4            2030  73.4%   1253  51.2%  +0.94 [-3.35, +5.39]
+js@8            2030  74.7%   1144  55.4%  +2.22 [-2.30, +6.83]
+js@16           2030  70.8%    993  61.3%  -1.67 [-6.21, +2.88]
+
+fixed sequence (delta = 5.0pp):
+  λ=2: +2.17 [-2.18, +6.58] pass
+  λ=4: +0.94 [-3.35, +5.39] pass
+  λ=8: +2.22 [-2.30, +6.83] pass
+  λ=16: -1.67 [-6.21, +2.88] FAIL (stop)
+  js-ref (reported, not in sequence): pass
+  phase_switch (reported, not in sequence): pass
+λ* = 8

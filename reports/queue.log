@@ -1,0 +1,210 @@
+== waiting for the formal experiment 2026-11-09T19:40:53Z
+== waiting for the formal experiment 2026-11-09T19:46:03Z
+formal script is no longer running and produced no test report; continuing with what exists
+== export and push reports 2026-11-10T10:31:09Z
+14210 runs -> reports/js_formal_calib.csv
+5700 runs -> reports/js_formal_test.csv
+4290 runs -> reports/js_search.csv
+1863 runs -> reports/js_pilot.csv
+Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: unable to auto-detect email address (got 'ubuntu@thesis-runner.(none)')
+error: cannot pull with rebase: Your index contains uncommitted changes.
+error: Please commit or stash them.
+error: cannot pull with rebase: Your index contains uncommitted changes.
+error: Please commit or stash them.
+error: cannot pull with rebase: Your index contains uncommitted changes.
+error: Please commit or stash them.
+error: cannot pull with rebase: Your index contains uncommitted changes.
+error: Please commit or stash them.
+PUSH FAILED: copy ~/prism-thesis/reports to E: or paste the report files
+== transfer (70B): search on dev 2026-11-10T10:31:42Z
+待运行 4290 次（已完成 0 次，已记录费用 0.0000 美元）→ results/js70/search.jsonl
+进度 50/4290，成功 49，基础设施错误 0，累计估计费用 0.0086 美元
+进度 100/4290，成功 89，基础设施错误 0，累计估计费用 0.0190 美元
+进度 150/4290，成功 132，基础设施错误 0，累计估计费用 0.0320 美元
+进度 200/4290，成功 159，基础设施错误 0，累计估计费用 0.0424 美元
+进度 250/4290，成功 200，基础设施错误 0，累计估计费用 0.0524 美元
+进度 300/4290，成功 250，基础设施错误 0，累计估计费用 0.0629 美元
+进度 350/4290，成功 299，基础设施错误 0，累计估计费用 0.0767 美元
+进度 400/4290，成功 340，基础设施错误 0，累计估计费用 0.0931 美元
+进度 450/4290，成功 381，基础设施错误 0，累计估计费用 0.1067 美元
+进度 500/4290，成功 427，基础设施错误 0，累计估计费用 0.1158 美元
+进度 550/4290，成功 477，基础设施错误 0，累计估计费用 0.1265 美元
+进度 600/4290，成功 516，基础设施错误 0，累计估计费用 0.1349 美元
+进度 650/4290，成功 559，基础设施错误 0，累计估计费用 0.1462 美元
+进度 700/4290，成功 600，基础设施错误 0，累计估计费用 0.1579 美元
+进度 750/4290，成功 649，基础设施错误 0，累计估计费用 0.1684 美元
+进度 800/4290，成功 692，基础设施错误 0，累计估计费用 0.1790 美元
+进度 850/4290，成功 741，基础设施错误 0，累计估计费用 0.1885 美元
+进度 900/4290，成功 785，基础设施错误 0，累计估计费用 0.2037 美元
+进度 950/4290，成功 821，基础设施错误 0，累计估计费用 0.2151 美元
+进度 1000/4290，成功 864，基础设施错误 0，累计估计费用 0.2252 美元
+进度 1050/4290，成功 902，基础设施错误 0，累计估计费用 0.2366 美元
+进度 1100/4290，成功 942，基础设施错误 0，累计估计费用 0.2448 美元
+进度 1150/4290，成功 985，基础设施错误 0，累计估计费用 0.2535 美元
+进度 1200/4290，成功 1034，基础设施错误 0，累计估计费用 0.2642 美元
+进度 1250/4290，成功 1083，基础设施错误 0，累计估计费用 0.2728 美元
+进度 1300/4290，成功 1133，基础设施错误 0，累计估计费用 0.2835 美元
+进度 1350/4290，成功 1183，基础设施错误 0，累计估计费用 0.2930 美元
+进度 1400/4290，成功 1232，基础设施错误 0，累计估计费用 0.3044 美元
+进度 1450/4290，成功 1282，基础设施错误 0，累计估计费用 0.3124 美元
+进度 1500/4290，成功 1330，基础设施错误 0，累计估计费用 0.3223 美元
+进度 1550/4290，成功 1373，基础设施错误 0，累计估计费用 0.3319 美元
+进度 1600/4290，成功 1405，基础设施错误 0，累计估计费用 0.3457 美元
+进度 1650/4290，成功 1437，基础设施错误 0，累计估计费用 0.3556 美元
+进度 1700/4290，成功 1485，基础设施错误 0，累计估计费用 0.3658 美元
+进度 1750/4290，成功 1535，基础设施错误 0，累计估计费用 0.3772 美元
+进度 1800/4290，成功 1583，基础设施错误 0，累计估计费用 0.3909 美元
+进度 1850/4290，成功 1621，基础设施错误 0，累计估计费用 0.4101 美元
+进度 1900/4290，成功 1667，基础设施错误 0，累计估计费用 0.4213 美元
+进度 1950/4290，成功 1715，基础设施错误 0，累计估计费用 0.4299 美元
+进度 2000/4290，成功 1759，基础设施错误 0，累计估计费用 0.4413 美元
+进度 2050/4290，成功 1805，基础设施错误 0，累计估计费用 0.4498 美元
+进度 2100/4290，成功 1845，基础设施错误 0，累计估计费用 0.4612 美元
+进度 2150/4290，成功 1889，基础设施错误 0，累计估计费用 0.4729 美元
+进度 2200/4290，成功 1938，基础设施错误 0，累计估计费用 0.4829 美元
+进度 2250/4290，成功 1978，基础设施错误 0，累计估计费用 0.4938 美元
+进度 2300/4290，成功 2028，基础设施错误 0，累计估计费用 0.5069 美元
+进度 2350/4290，成功 2061，基础设施错误 0，累计估计费用 0.5183 美元
+进度 2400/4290，成功 2107，基础设施错误 0，累计估计费用 0.5296 美元
+进度 2450/4290，成功 2153，基础设施错误 0，累计估计费用 0.5403 美元
+进度 2500/4290，成功 2184，基础设施错误 0，累计估计费用 0.5504 美元
+进度 2550/4290，成功 2227，基础设施错误 0，累计估计费用 0.5593 美元
+进度 2600/4290，成功 2274，基础设施错误 0，累计估计费用 0.5696 美元
+进度 2650/4290，成功 2324，基础设施错误 0，累计估计费用 0.5780 美元
+进度 2700/4290，成功 2373，基础设施错误 0，累计估计费用 0.5883 美元
+进度 2750/4290，成功 2423，基础设施错误 0，累计估计费用 0.5983 美元
+进度 2800/4290，成功 2472，基础设施错误 0，累计估计费用 0.6078 美元
+进度 2850/4290，成功 2522，基础设施错误 0，累计估计费用 0.6186 美元
+进度 2900/4290，成功 2572，基础设施错误 0，累计估计费用 0.6267 美元
+进度 2950/4290，成功 2614，基础设施错误 0，累计估计费用 0.6367 美元
+进度 3000/4290，成功 2663，基础设施错误 0，累计估计费用 0.6484 美元
+进度 3050/4290，成功 2681，基础设施错误 0，累计估计费用 0.6601 美元
+进度 3100/4290，成功 2720，基础设施错误 0，累计估计费用 0.6701 美元
+进度 3150/4290，成功 2770，基础设施错误 0，累计估计费用 0.6807 美元
+进度 3200/4290，成功 2820，基础设施错误 0，累计估计费用 0.6951 美元
+进度 3250/4290，成功 2868，基础设施错误 0，累计估计费用 0.7075 美元
+进度 3300/4290，成功 2901，基础设施错误 0，累计估计费用 0.7247 美元
+进度 3350/4290，成功 2946，基础设施错误 0，累计估计费用 0.7339 美元
+进度 3400/4290，成功 2996，基础设施错误 0，累计估计费用 0.7449 美元
+进度 3450/4290，成功 3036，基础设施错误 0，累计估计费用 0.7537 美元
+进度 3500/4290，成功 3085，基础设施错误 0，累计估计费用 0.7637 美元
+进度 3550/4290，成功 3123，基础设施错误 0，累计估计费用 0.7759 美元
+进度 3600/4290，成功 3171，基础设施错误 0，累计估计费用 0.7864 美元
+进度 3650/4290，成功 3217，基础设施错误 0，累计估计费用 0.7971 美元
+进度 3700/4290，成功 3262，基础设施错误 0，累计估计费用 0.8071 美元
+进度 3750/4290，成功 3309，基础设施错误 0，累计估计费用 0.8219 美元
+进度 3800/4290，成功 3345，基础设施错误 0，累计估计费用 0.8334 美元
+进度 3850/4290，成功 3388，基础设施错误 0，累计估计费用 0.8435 美元
+进度 3900/4290，成功 3433，基础设施错误 0，累计估计费用 0.8545 美元
+进度 3950/4290，成功 3464，基础设施错误 0，累计估计费用 0.8630 美元
+进度 4000/4290，成功 3507，基础设施错误 0，累计估计费用 0.8720 美元
+进度 4050/4290，成功 3556，基础设施错误 0，累计估计费用 0.8828 美元
+进度 4100/4290，成功 3605，基础设施错误 0，累计估计费用 0.8907 美元
+进度 4150/4290，成功 3655，基础设施错误 0，累计估计费用 0.9013 美元
+进度 4200/4290，成功 3705，基础设施错误 0，累计估计费用 0.9112 美元
+进度 4250/4290，成功 3754，基础设施错误 0，累计估计费用 0.9225 美元
+完成 4290 次，成功 3794，基础设施错误 0，未完成 0 次，累计估计费用 0.9293 美元
+stratum                    step    loss   U97.5   save  omitted
+initial|query                 1   +2.16   +6.67     74  fn_other
+initial|query                 2   +2.16   +6.10    105  fn_other+answer_query+empty_scalar
+initial|query                 3   +0.87   +4.76    205  fn_other+answer_query+empty_scalar+insight
+initial|query                 4   +0.00   +3.11    226  fn_other+answer_query+empty_scalar+insight+observe+rounds+modify_answer
+initial|query                 5   +2.16   +5.47    525  fn_other+answer_query+empty_scalar+insight+observe+rounds+modify_answer+exp_rest
+after_success|query           1   +1.73   +7.29    304  exp_rest
+after_success|query           2   +2.16   +7.14    452  exp_rest+exp_top1
+after_success|query           3   +4.76  +10.11    531  exp_rest+exp_top1+fn_other+fn_predicted
+after_success|query           4   +6.49  +13.03    613  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope
+after_success|query           5  +12.55  +20.45    716  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight
+after_success|query           6   +6.93  +11.59    739  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight+observe+rounds+modify_answer
+after_success|query           7  +26.84  +35.35    781  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight+observe+rounds+modify_answer+answer_query+empty_scalar
+initial|modify                1   +0.00   +0.00     74  fn_other
+initial|modify                2   +1.01  +10.00    133  fn_other+answer_query+empty_scalar
+initial|modify                3   +0.00   +3.33    243  fn_other+answer_query+empty_scalar+insight
+initial|modify                4   +0.00   +3.33    303  fn_other+answer_query+empty_scalar+insight+observe+rounds+modify_answer
+initial|modify                5   +1.01   +7.07    534  fn_other+answer_query+empty_scalar+insight+observe+rounds+modify_answer+exp_rest
+after_success|modify          1   +0.00   +5.33    223  exp_rest
+after_success|modify          2   +0.00   +5.33    347  exp_rest+exp_top1
+after_success|modify          3   -2.02   +0.00    424  exp_rest+exp_top1+fn_other+fn_predicted
+after_success|modify          4   +0.00   +6.45    473  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope
+after_success|modify          5   +1.01   +8.33    602  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight
+after_success|modify          6   -1.01   +3.17    615  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight+observe+rounds+modify_answer
+after_success|modify          7   -1.01   +3.17    664  exp_rest+exp_top1+fn_other+fn_predicted+schema+one_stmt+scope+insight+observe+rounds+modify_answer+answer_query+empty_scalar
+
+family (task type: initial step / after-success step, summed upper bound, est. saving per task):
+  λ= 2  query: 0/0 U=0.0 save≈0   modify: 1/3 U=0.0 save≈498
+  λ= 4  query: 4/0 U=3.1 save≈226   modify: 1/7 U=3.2 save≈738
+  λ= 6  query: 5/0 U=5.5 save≈525   modify: 1/7 U=3.2 save≈738
+  λ= 8  query: 5/0 U=5.5 save≈525   modify: 4/7 U=6.5 save≈968
+  λ=10  query: 5/0 U=5.5 save≈525   modify: 4/7 U=6.5 save≈968
+  λ=12  query: 0/6 U=11.6 save≈739   modify: 5/7 U=10.2 save≈1198
+  λ=16  query: 5/3 U=15.6 save≈1056   modify: 5/7 U=10.2 save≈1198
+
+written results/js70/js_table.json
+== transfer (70B): test set with js@8 2026-11-10T13:37:30Z
+待运行 1710 次（已完成 0 次，已记录费用 0.0000 美元）→ results/js70/test.jsonl
+进度 50/1710，成功 43，基础设施错误 0，累计估计费用 0.0121 美元
+进度 100/1710，成功 89，基础设施错误 0，累计估计费用 0.0235 美元
+进度 150/1710，成功 130，基础设施错误 0，累计估计费用 0.0342 美元
+进度 200/1710，成功 169，基础设施错误 0，累计估计费用 0.0452 美元
+进度 250/1710，成功 208，基础设施错误 0，累计估计费用 0.0562 美元
+进度 300/1710，成功 257，基础设施错误 0，累计估计费用 0.0667 美元
+进度 350/1710，成功 299，基础设施错误 0，累计估计费用 0.0779 美元
+进度 400/1710，成功 342，基础设施错误 0，累计估计费用 0.0898 美元
+进度 450/1710，成功 390，基础设施错误 0，累计估计费用 0.1006 美元
+进度 500/1710，成功 433，基础设施错误 0，累计估计费用 0.1111 美元
+进度 550/1710，成功 470，基础设施错误 0，累计估计费用 0.1228 美元
+进度 600/1710，成功 513，基础设施错误 0，累计估计费用 0.1335 美元
+进度 650/1710，成功 561，基础设施错误 0，累计估计费用 0.1437 美元
+进度 700/1710，成功 602，基础设施错误 0，累计估计费用 0.1555 美元
+进度 750/1710，成功 646，基础设施错误 0，累计估计费用 0.1675 美元
+进度 800/1710，成功 694，基础设施错误 0，累计估计费用 0.1785 美元
+进度 850/1710，成功 737，基础设施错误 0，累计估计费用 0.1891 美元
+进度 900/1710，成功 774，基础设施错误 0，累计估计费用 0.2003 美元
+进度 950/1710，成功 819，基础设施错误 0，累计估计费用 0.2106 美元
+进度 1000/1710，成功 867，基础设施错误 0，累计估计费用 0.2213 美元
+进度 1050/1710，成功 908，基础设施错误 0，累计估计费用 0.2328 美元
+进度 1100/1710，成功 952，基础设施错误 0，累计估计费用 0.2443 美元
+进度 1150/1710，成功 998，基础设施错误 0，累计估计费用 0.2564 美元
+进度 1200/1710，成功 1043，基础设施错误 0，累计估计费用 0.2667 美元
+进度 1250/1710，成功 1077，基础设施错误 0，累计估计费用 0.2779 美元
+进度 1300/1710，成功 1127，基础设施错误 0，累计估计费用 0.2876 美元
+进度 1350/1710，成功 1173，基础设施错误 0，累计估计费用 0.3000 美元
+进度 1400/1710，成功 1217，基础设施错误 0，累计估计费用 0.3111 美元
+进度 1450/1710，成功 1261，基础设施错误 0，累计估计费用 0.3228 美元
+进度 1500/1710，成功 1301，基础设施错误 0，累计估计费用 0.3348 美元
+进度 1550/1710，成功 1342，基础设施错误 0，累计估计费用 0.3452 美元
+进度 1600/1710，成功 1378，基础设施错误 0，累计估计费用 0.3560 美元
+进度 1650/1710，成功 1426，基础设施错误 0，累计估计费用 0.3671 美元
+进度 1700/1710，成功 1472，基础设施错误 0，累计估计费用 0.3783 美元
+完成 1710 次，成功 1479，基础设施错误 0，未完成 0 次，累计估计费用 0.3802 美元
+
+== all tasks: 114 tasks
+condition         runs   succ    tok   save      diff vs full (95% CI)   tokens per request: initial / after_success / after_error
+full               570  86.5%   2479   0.0%                              1143 / 1282 / 1330
+phase_switch       570  83.5%   1275  48.6%      -2.98 [ -8.79, +2.31]   772 / 411 / 1202
+js@8               570  89.5%   1330  46.3%      +2.98 [ -1.07, +7.14]   406 / 849 / 1215
+
+== query tasks: 86 tasks
+condition         runs   succ    tok   save      diff vs full (95% CI)   tokens per request: initial / after_success / after_error
+full               430  87.2%   2492   0.0%                              1160 / 1317 / -
+phase_switch       430  85.1%   1249  49.9%      -2.09 [ -8.39, +4.21]   800 / 435 / 1084
+js@8               430  90.2%   1394  44.0%      +3.02 [ -2.33, +8.41]   354 / 1026 / 958
+
+== modify tasks: 28 tasks
+condition         runs   succ    tok   save      diff vs full (95% CI)   tokens per request: initial / after_success / after_error
+full               140  84.3%   2439   0.0%                              1091 / 1167 / 1330
+phase_switch       140  78.6%   1355  44.4%      -5.71 [-17.86, +3.75]   689 / 333 / 1217
+js@8               140  87.1%   1133  53.6%      +2.86 [ -0.87, +8.15]   567 / 259 / 1222
+== queue done 2026-11-10T15:08:15Z
