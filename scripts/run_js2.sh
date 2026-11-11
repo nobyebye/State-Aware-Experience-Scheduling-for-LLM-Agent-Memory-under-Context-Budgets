@@ -22,7 +22,7 @@ SEARCH=$(python -c "import sys; sys.path.insert(0,'analysis'); from js2_search i
 echo "== stage 1: dev search for the new path $(date -u +%FT%TZ)"
 python -m prism_thesis dry-run --split dev --conditions "$SEARCH" --limit 2 --out /tmp/js2_dry.jsonl
 python -m prism_thesis run --split dev --conditions "$SEARCH" --reps 3 --workers "$WORKERS" \
-  --out results/js2/search.jsonl --allow-paid --budget-usd "$BUDGET"
+  --out results/js2/search.jsonl --allow-paid --budget-usd "$BUDGET" || echo "search run reported errors (finished runs are kept)"
 echo "== stage 2: js2 policy family"
 python analysis/js2_search.py --runs-v1 results/js/search.jsonl --runs-v2 results/js2/search.jsonl \
   --out results/js2/js_table.json | tee results/js2/search_report.txt
@@ -32,7 +32,8 @@ CALIB_IDS=$(python -c "import json;print(','.join(map(str,json.load(open('config
 sha256sum results/js2/js_table.json | tee results/js2/js_table.sha256
 echo "== stage 3: calibration ($CONDS) $(date -u +%FT%TZ)"
 python -m prism_thesis --config configs/js2.json run --split calib --task-ids "$CALIB_IDS" --conditions "$CONDS" \
-  --reps 10 --workers "$WORKERS" --out results/js2/calib.jsonl --allow-paid --budget-usd "$BUDGET"
+  --reps 10 --workers "$WORKERS" --out results/js2/calib.jsonl --allow-paid --budget-usd "$BUDGET" \
+  || echo "calibration run reported errors (finished runs are kept; the analysis checks completeness)"
 echo "== stage 4: fixed-sequence test"
 python analysis/js_calibrate.py --runs results/js2/calib.jsonl --sequence "$(echo $SEQ | tr ' ' ',')" --others '' \
   --lambda-out results/js2/lambda_star.txt | tee results/js2/calib_report.txt
