@@ -94,15 +94,22 @@ def _best_examples(records: Sequence[Mapping]) -> dict[int, tuple]:
     return best
 
 
+def _type_of(task, env) -> str:
+    return task_type(task.instruction) if env is None else env.task_features(task).task_type
+
+
 def extract_examples(records: Sequence[Mapping], tasks: Mapping[int, Task],
-                     max_answer_chars: int = 300) -> list[Experience]:
+                     max_answer_chars: int = 300, env=None) -> list[Experience]:
+    """env 为 None 时是 db_bench；其他环境用 env 的示例文本格式与任务类型。"""
     best = _best_examples(records)
     out = []
     for tid in sorted(best):
         task = tasks[tid]
         _, sqls, _, answer = best[tid]
-        out.append(Experience(f'ex-{tid}', 'example', example_text(task, sqls, answer, max_answer_chars),
-                              task.instruction, task_type(task.instruction), **_source(task)))
+        text = example_text(task, sqls, answer, max_answer_chars) if env is None else \
+            env.example_text(task, sqls, answer, max_answer_chars)
+        out.append(Experience(f'ex-{tid}', 'example', text,
+                              task.instruction, _type_of(task, env), **_source(task)))
     return out
 
 
@@ -128,7 +135,7 @@ def with_example_observations(entries: Sequence[Experience], records: Sequence[M
     return out
 
 
-def extract_repairs(records: Sequence[Mapping], tasks: Mapping[int, Task]) -> list[Experience]:
+def extract_repairs(records: Sequence[Mapping], tasks: Mapping[int, Task], env=None) -> list[Experience]:
     out, seen = [], set()
     per_task: dict[int, int] = defaultdict(int)
     for r in _usable(records):
@@ -142,7 +149,7 @@ def extract_repairs(records: Sequence[Mapping], tasks: Mapping[int, Task]) -> li
             fix = next((u for u in turns[i + 1:] if u['exec']['ok']), None)
             if fix is None:
                 continue
-            s = sig.signature(res, t['content'])
+            s = sig.signature(res, t['content']) if env is None else env.signature(res, t['content'])
             if (r['task_id'], s) in seen:
                 continue
             seen.add((r['task_id'], s))
@@ -150,9 +157,10 @@ def extract_repairs(records: Sequence[Mapping], tasks: Mapping[int, Task]) -> li
             n = per_task[task.task_id]
             per_task[task.task_id] += 1
             line = (res.text or '').strip().split('\n')[0][:MAX_ERROR_CHARS]
-            out.append(Experience(f'rp-{task.task_id}-{n}', 'repair', repair_text(line, t['content'], fix['content']),
-                                  task.instruction, task_type(task.instruction), **_source(task),
-                                  error_key=sig.error_key(res), signature=s))
+            text = (repair_text if env is None else env.repair_text)(line, t['content'], fix['content'])
+            out.append(Experience(f'rp-{task.task_id}-{n}', 'repair', text,
+                                  task.instruction, _type_of(task, env), **_source(task),
+                                  error_key=sig.error_key(res) if env is None else env.error_key(res), signature=s))
     return out
 
 
@@ -167,17 +175,18 @@ INSIGHT_PROMPT = ('Below are pairs of attempts at database tasks. In each pair, 
                   'other tasks as well. Output only the rules.')
 
 
-def render_trajectory(task: Task, rec: Mapping) -> str:
+def render_trajectory(task: Task, rec: Mapping, obs_label: str = 'MySQL') -> str:
     lines = [f'Task: {task.instruction}']
     for t in rec.get('turns', []):
         lines.append(f"Agent: {t.get('response', '').strip()}")
         if 'observation' in t:
-            lines.append(f"MySQL: {t['observation'][:MAX_OBS_CHARS]}")
+            lines.append(f"{obs_label}: {t['observation'][:MAX_OBS_CHARS]}")
     lines.append(f"Outcome: {'success' if rec.get('success') else 'failure (' + str(rec.get('status')) + ')'}")
     return '\n'.join(lines)
 
 
-def insight_batches(records: Sequence[Mapping], tasks: Mapping[int, Task], batch_size: int = 4) -> list[dict]:
+def insight_batches(records: Sequence[Mapping], tasks: Mapping[int, Task], batch_size: int = 4,
+                    env=None) -> list[dict]:
     """同一道题的第一次失败与第一次成功组成一对，按任务类型分批（批内按题目编号）。"""
     by_task: dict[int, dict] = defaultdict(dict)
     for r in _usable(records):
@@ -188,7 +197,7 @@ def insight_batches(records: Sequence[Mapping], tasks: Mapping[int, Task], batch
         d = by_task[tid]
         if 'succ' in d and 'fail' in d:
             task = tasks[tid]
-            pairs[task_type(task.instruction)].append((task, d['fail'], d['succ']))
+            pairs[_type_of(task, env)].append((task, d['fail'], d['succ']))
     out = []
     for ttype in sorted(pairs):
         ps = pairs[ttype]
@@ -197,13 +206,14 @@ def insight_batches(records: Sequence[Mapping], tasks: Mapping[int, Task], batch
     return out
 
 
-def insight_messages(batch: Mapping, max_rules: int) -> list[dict]:
+def insight_messages(batch: Mapping, max_rules: int, env=None) -> list[dict]:
     blocks = []
     for n, (task, fail, succ) in enumerate(batch['pairs'], 1):
-        blocks.append(f'Pair {n}\n[Failed attempt]\n{render_trajectory(task, fail)}\n'
-                      f'[Successful attempt]\n{render_trajectory(task, succ)}')
-    return [{'role': 'system', 'content': INSIGHT_SYSTEM},
-            {'role': 'user', 'content': INSIGHT_PROMPT.format(pairs='\n\n'.join(blocks), n=max_rules)}]
+        label = 'MySQL' if env is None else env.obs_label
+        blocks.append(f'Pair {n}\n[Failed attempt]\n{render_trajectory(task, fail, label)}\n'
+                      f'[Successful attempt]\n{render_trajectory(task, succ, label)}')
+    return [{'role': 'system', 'content': INSIGHT_SYSTEM if env is None else env.insight_system},
+            {'role': 'user', 'content': ((env.insight_prompt if env is not None else None) or INSIGHT_PROMPT).format(pairs='\n\n'.join(blocks), n=max_rules)}]
 
 
 _RULE = re.compile(r'^\s*[-*•]\s+(.+?)\s*$')
@@ -227,11 +237,11 @@ def parse_rules(text: str, max_rules: int) -> list[str]:
 
 
 def distill_insights(batches: Sequence[Mapping], chat: Callable[[list[dict]], str],
-                     max_rules: int = 3) -> list[Experience]:
+                     max_rules: int = 3, env=None) -> list[Experience]:
     """chat(messages) -> 回复文本。相同文本（忽略大小写与首尾空白）的洞见合并，来源取并集。"""
     merged: dict[str, dict] = {}
     for b_idx, batch in enumerate(batches):
-        reply = chat(insight_messages(batch, max_rules))
+        reply = chat(insight_messages(batch, max_rules, env))
         tasks = [p[0] for p in batch['pairs']]
         for j, rule in enumerate(parse_rules(reply, max_rules)):
             norm = ' '.join(rule.lower().split())

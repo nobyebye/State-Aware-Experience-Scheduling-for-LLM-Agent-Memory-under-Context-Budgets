@@ -11,23 +11,20 @@ class PhaseSwitchPolicy(Policy):
       成功执行后：省略 SQL 规则、全部函数说明与表信息；经验只发送洞见；
       非查询任务在初始与成功执行后省略查询答案格式说明。
     经验检索与 PRISM 相同（状态感知检索），二者只在“是否估计风险并优化选择”上不同。
-    提示整体替换（官方布局），不使用临时块。"""
+    提示整体替换（官方布局），不使用临时块。
+    各状态省略的指令组由环境给出（Environment.expert_drop；上面是 db_bench 的规则）。"""
     name = 'phase_switch'
 
     def plan(self, state: TurnState) -> Plan:
         f = self.features
         repairs = self.collect_repairs(state)
         ex = self.exp_initial
+        drop = tuple(self.env.expert_drop(state.phase, f.task_type))
         if state.phase == 'after_error':
-            drop = ()
             exp = set(ex.get('exp_top1', ())) | set(ex.get('exp_rest', ())) | set(ex.get('insight', ())) | repairs
         elif state.phase == 'initial':
-            drop = ('fn_other',)
             exp = set(ex.get('exp_top1', ())) | set(ex.get('exp_rest', ())) | set(ex.get('insight', ()))
         else:
-            drop = ('one_stmt', 'scope', 'fn_predicted', 'fn_other', 'schema')
             exp = set(ex.get('insight', ()))
-        if state.phase != 'after_error' and f.task_type == 'modify':
-            drop += ANSWER_FORMAT
         instr = frozenset(u for u in self.drop_groups(drop) if not u.startswith('exp:'))
         return Plan(prefix=instr | frozenset(exp), info={'dropped': list(drop), 'n_exp': len(exp)})

@@ -26,26 +26,37 @@ TAIL_SEPARATOR = '\n\n'
 MEMORY_SEPARATOR = '\n\n'
 
 
-def task_features(task: Task) -> TaskFeatures:
+def task_features(task: Task, env=None) -> TaskFeatures:
+    if env is not None:
+        return env.task_features(task)
     fns = feat.predict_functions(task.instruction)
     return TaskFeatures(feat.task_type(task.instruction), fns, group_units(fns))
 
 
-def build_messages(task: Task, plan: Plan, history: list[dict], store=None) -> tuple[list[dict], dict]:
+class _DbBenchRender:
+    """缺省（db_bench）的渲染：直接用 prompts 模块的函数。"""
+    render_system = staticmethod(render_system)
+    render_first_user = staticmethod(render_first_user)
+    render_rules = staticmethod(render_rules)
+
+
+def build_messages(task: Task, plan: Plan, history: list[dict], store=None, env=None) -> tuple[list[dict], dict]:
     """返回 (消息列表, 各部分文本)。history 为 [{'role','content'}]，不含临时块。
-    经验单元：放在 prefix 中的渲染为经验块，置于第一条用户消息的任务指令之前；放在 tail 中的渲染在临时块开头。"""
+    经验单元：放在 prefix 中的渲染为经验块，置于第一条用户消息的任务指令之前；放在 tail 中的渲染在临时块开头。
+    env 为 None 时按 db_bench 渲染；其他环境由 env 渲染系统消息、第一条用户消息与规则文本。"""
+    r = env if env is not None else _DbBenchRender
     prefix = frozenset(u for u in plan.prefix if not is_exp(u))
     tail_ids = frozenset(u for u in plan.tail if not is_exp(u))
-    system = plan.system_text if plan.system_text is not None else render_system(prefix, task)
+    system = plan.system_text if plan.system_text is not None else r.render_system(prefix, task)
     if plan.schema_text is not None:
         first_user = f'{task.instruction}\n{plan.schema_text}'
     else:
-        first_user = render_first_user(prefix, task)
+        first_user = r.render_first_user(prefix, task)
     memory = plan.memory_text if plan.memory_text is not None else render_memory(plan.prefix, store)
     if memory:
         first_user = f'{memory}{MEMORY_SEPARATOR}{first_user}'
     tail_memory = render_memory(plan.tail, store)
-    tail = MEMORY_SEPARATOR.join(x for x in (tail_memory, render_rules(tail_ids, task) if tail_ids else '') if x)
+    tail = MEMORY_SEPARATOR.join(x for x in (tail_memory, r.render_rules(tail_ids, task) if tail_ids else '') if x)
     if tail and plan.tail_in_system:
         system = f'{system}\n{tail}' if system else tail
     messages = [{'role': 'system', 'content': system}, {'role': 'user', 'content': first_user}]
@@ -71,12 +82,17 @@ class EpisodeResult:
     api_completion_tokens: Optional[int] = None
     api_cached_tokens: Optional[int] = None
     final_md5: Optional[str] = None
+    grade_info: dict = field(default_factory=dict)   # 环境判分的附加信息（db_bench 为空）
 
 
 def run_episode(task: Task, policy: Policy, llm, session: TaskSession, counter: TokenCounter,
                 max_rounds: int = 3, first_action_only: bool = True,
-                rng: Optional[random.Random] = None) -> EpisodeResult:
-    features = task_features(task)
+                rng: Optional[random.Random] = None, env=None) -> EpisodeResult:
+    """env 为 None 时是 db_bench（原有行为）；其他环境的特征、状态、解析与判分都由 env 给出。"""
+    features = task_features(task, env)
+    phase_of = env.phase if env is not None else feat.phase
+    first_of = env.first_action if env is not None else first_action
+    parse_of = env.parse if env is not None else parse
     policy.start(task, features, rng or random.Random(0))
     history: list[dict] = []
     last_exec: Optional[ExecResult] = None
@@ -87,17 +103,17 @@ def run_episode(task: Task, policy: Policy, llm, session: TaskSession, counter: 
     api_p = api_c = api_cache = 0
     api_complete = True
     for turn in range(max_rounds):
-        state = TurnState(turn, feat.phase(turn, last_exec), last_exec, last_sql)
+        state = TurnState(turn, phase_of(turn, last_exec), last_exec, last_sql)
         plan = policy.plan(state)
-        messages, parts = build_messages(task, plan, history, store)
+        messages, parts = build_messages(task, plan, history, store, env)
         n_in = counter.count_messages(messages)
         n_mem = counter.count(parts['memory']) + counter.count(parts['tail_memory'])
         started = time.monotonic()
         resp = llm.chat(messages)
         latency = time.monotonic() - started
         raw = resp.content
-        content = first_action(raw) if first_action_only else raw
-        parsed = parse(content)
+        content = first_of(raw) if first_action_only else raw
+        parsed = parse_of(content)
         rec = {
             'turn': turn, 'phase': state.phase, 'units': sorted(plan.units), 'tail': sorted(plan.tail),
             'experiences': sorted(u for u in plan.units if is_exp(u)),
@@ -139,7 +155,11 @@ def run_episode(task: Task, policy: Policy, llm, session: TaskSession, counter: 
         history.append({'role': 'user', 'content': last_exec.text})
         res.turns.append(rec)
     res.status, res.answer = status, answer
-    if task.answer_md5 is not None:
+    if env is not None:
+        res.success, info = env.grade(task, session, status, answer)
+        res.final_md5 = info.pop('final_md5', None)
+        res.grade_info = info
+    elif task.answer_md5 is not None:
         res.final_md5 = session.table_md5()
         res.success = res.final_md5 == task.answer_md5
     else:

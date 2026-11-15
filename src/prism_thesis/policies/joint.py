@@ -14,8 +14,6 @@
 """
 from __future__ import annotations
 
-from ..prism import recovery
-from ..prompts import ALL_IDS, CORE_IDS
 from .base import Plan, Policy, TurnState
 
 PHASES = ('initial', 'after_success')
@@ -42,15 +40,16 @@ class JointPolicy(Policy):
 
     def plan(self, state: TurnState) -> Plan:
         repairs = self.collect_repairs(state)
-        self.reincluded |= recovery.groups_for(state.last_exec)
+        self.reincluded |= self.env.recovery_groups(state.last_exec)
         exp = self.exp_initial
         exp_units = frozenset(u for us in exp.values() for u in us) | repairs
         info = {'phase': state.phase, 'reincluded': sorted(self.reincluded), 'n_repairs': len(repairs)}
+        all_ids = self.env.all_ids(self.task)
         if state.phase == 'after_error':
-            return Plan(prefix=ALL_IDS | exp_units, info={**info, 'dropped': [], 'n_dropped_units': 0})
+            return Plan(prefix=all_ids | exp_units, info={**info, 'dropped': [], 'n_dropped_units': 0})
         drop = [g for g in self.spec.get((state.phase, self.features.task_type), ())
                 if g not in self.reincluded]
         groups = {**self.features.groups, **{g: frozenset(u) for g, u in exp.items()}}
-        dropped = frozenset().union(*(groups.get(g, frozenset()) for g in drop)) - CORE_IDS
-        units = (ALL_IDS | exp_units) - dropped
+        dropped = frozenset().union(*(groups.get(g, frozenset()) for g in drop)) - self.env.core_ids
+        units = (all_ids | exp_units) - dropped
         return Plan(prefix=units, info={**info, 'dropped': sorted(drop), 'n_dropped_units': len(dropped)})

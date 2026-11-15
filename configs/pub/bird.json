@@ -1,0 +1,11 @@
+{
+  "_说明": "发表线主环境 BIRD-Agent（只读 SQLite，多轮）。其余设置继承 default.json。数据由 scripts/pub/prepare_bird.py 生成；数据库文件放在 bird.db_root（不进仓库）。",
+  "extends": "../default.json",
+  "env": "bird",
+  "agent": {"max_rounds": 6},
+  "bird": {"data_dir": "data/bird", "db_root": "data/bird/dev_databases", "timeout_s": 30, "obs_chars": 2000, "max_rows": 100000},
+  "memory": {"store": "results/pub/bird/memory_store.json"},
+  "prism": {"js_table": "results/pub/bird/js_table.json"},
+  "pub": {"test_usage_log": "docs/pub/test_usage.jsonl"},
+  "reps": {"memory_build": {"nomem": 2}}
+}

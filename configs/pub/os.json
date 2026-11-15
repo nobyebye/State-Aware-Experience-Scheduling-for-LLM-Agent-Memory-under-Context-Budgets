@@ -1,0 +1,11 @@
+{
+  "_说明": "发表线第二环境：LifelongAgentBench 操作系统任务（Docker 中的 Ubuntu）。其余设置继承 default.json。数据由 scripts/pub/prepare_os.py 生成。",
+  "extends": "../default.json",
+  "env": "os",
+  "agent": {"max_rounds": 5},
+  "os": {"data_dir": "data/os", "image": "prism-os:24.04", "dockerfile": "docker/os/Dockerfile", "timeout_s": 20, "obs_chars": 2000, "memory": "512m", "pids_limit": 256},
+  "memory": {"store": "results/pub/os/memory_store.json"},
+  "prism": {"js_table": "results/pub/os/js_table.json"},
+  "pub": {"test_usage_log": "docs/pub/test_usage.jsonl"},
+  "reps": {"memory_build": {"nomem": 2}}
+}

@@ -20,8 +20,10 @@ from .store import Experience, MemoryStore, make_uid
 
 class Retriever:
     def __init__(self, store: MemoryStore, k_examples: int = 3, k_insights: int = 3, k_repairs: int = 2,
-                 k1: float = 1.2, b: float = 0.75):
+                 k1: float = 1.2, b: float = 0.75, env=None):
+        """env：任务环境；给出时用它的错误签名与检索偏好（如同库经验优先），None 为 db_bench。"""
         self.store = store
+        self.env = env
         self.k_examples, self.k_insights, self.k_repairs = k_examples, k_insights, k_repairs
         self._docs = {kind: store.of_kind(kind) for kind in ('example', 'repair', 'insight')}
         self._index = {kind: BM25([e.key_text for e in docs], k1, b) for kind, docs in self._docs.items()}
@@ -33,8 +35,10 @@ class Retriever:
     def _ranked(self, kind: str, task: Task, keep=lambda e: True) -> list[Experience]:
         docs = self._docs[kind]
         scores = self._index[kind].scores(task.instruction) if docs else []
-        cand = [(-s, e.eid, e) for s, e in zip(scores, docs) if self.allowed(e, task) and keep(e)]
-        return [e for _, _, e in sorted(cand, key=lambda t: t[:2])]
+        prefer = self.env.retrieval_prefer if self.env is not None else (lambda e, t: False)
+        cand = [(not prefer(e, task), -s, e.eid, e) for s, e in zip(scores, docs)
+                if self.allowed(e, task) and keep(e)]
+        return [e for *_, e in sorted(cand, key=lambda t: t[:3])]
 
     def examples(self, task: Task) -> list[Experience]:
         return self._ranked('example', task)[:self.k_examples]
@@ -60,7 +64,7 @@ class Retriever:
     def for_error(self, task: Task, result: Optional[ExecResult], sql: Optional[str],
                   exclude: Iterable[str] = ()) -> list[Experience]:
         """按错误签名检索修复经验（排除 exclude 中已取到的条目 id）；没有显式错误时为空。"""
-        s = sig.signature(result, sql)
+        s = self.env.signature(result, sql) if self.env is not None else sig.signature(result, sql)
         if s is None:
             return []
         skip = set(exclude)

@@ -7,7 +7,7 @@ from typing import Optional
 from ..data import Task
 from ..env import ExecResult
 from ..memory.store import make_uid
-from ..prompts import ALL_IDS, CORE_IDS
+from ..prompts import ALL_IDS
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,7 @@ class TaskFeatures:
     task_type: str                            # 由任务文本规则判断：query / modify
     predicted_functions: frozenset[str]
     groups: dict                              # 指令选择组 → 单元 id 集合（本题）
+    env: object = None                        # 任务环境（envs.Environment）；None 表示 db_bench
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,11 @@ class Policy:
 
     def start(self, task: Task, features: TaskFeatures, rng: random.Random) -> None:
         self.task, self.features, self.rng = task, features, rng
+        if features.env is not None:
+            self.env = features.env
+        else:
+            from ..envs import default_env
+            self.env = default_env()
         if self.memory is not None:
             self.exp_static = self.memory.static(task, features.task_type)
         else:
@@ -73,7 +79,7 @@ class Policy:
         return {**self.features.groups, **{g: frozenset(u) for g, u in self.exp_static.items()}}
 
     def full_units(self) -> frozenset:
-        return ALL_IDS | frozenset(u for us in self.exp_static.values() for u in us)
+        return self.env.all_ids(self.task) | frozenset(u for us in self.exp_static.values() for u in us)
 
     def full_plan(self, **info) -> Plan:
         return Plan(prefix=self.full_units(), info=info)
@@ -84,7 +90,7 @@ class Policy:
         all_groups = self.static_groups()
         for g in groups:
             dropped |= all_groups.get(g, frozenset())
-        return frozenset(self.full_units() - (dropped - CORE_IDS))
+        return frozenset(self.full_units() - (dropped - self.env.core_ids))
 
     def collect_repairs(self, state: TurnState) -> frozenset:
         """出错后按错误签名检索修复经验并累积；返回到本轮为止的修复经验单元。"""

@@ -1,5 +1,4 @@
 from ..memory.store import EXP_GROUPS
-from ..prompts import SELECTABLE_GROUPS
 from .base import Plan, Policy, TurnState
 
 
@@ -13,6 +12,6 @@ class RandomDropPolicy(Policy):
 
     def plan(self, state: TurnState) -> Plan:
         groups = self.static_groups()
-        candidates = [g for g in SELECTABLE_GROUPS + EXP_GROUPS if groups.get(g)]
+        candidates = [g for g in tuple(self.env.selectable_groups) + EXP_GROUPS if groups.get(g)]
         drop = sorted(self.rng.sample(candidates, min(self.k, len(candidates))))
         return Plan(prefix=self.drop_groups(drop), info={'dropped': drop})

@@ -38,8 +38,25 @@ from .tokens import TokenCounter
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _merge(base: dict, over: dict) -> dict:
+    out = dict(base)
+    for k, v in over.items():
+        out[k] = _merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def read_config(path: str | Path) -> dict:
+    """读取配置；"extends"（相对本文件的路径）指向的配置先读入，再用本文件逐键覆盖（字典递归合并）。"""
+    path = Path(path)
+    cfg = json.loads(path.read_text(encoding='utf-8'))
+    parent = cfg.pop('extends', None)
+    if parent:
+        cfg = _merge(read_config((path.parent / parent).resolve()), cfg)
+    return cfg
+
+
 def load_config(path: str | Path = ROOT / 'configs' / 'default.json') -> dict:
-    cfg = json.loads(Path(path).read_text(encoding='utf-8'))
+    cfg = read_config(path)
     set_variant(cfg.get('prompt_variant', 'standard'))
     set_prompt_options(cfg.get('prompt_overrides'), cfg.get('schema_style', 'official'))
     return cfg
@@ -96,8 +113,12 @@ def make_retriever(cfg: dict, settings: dict, allow_rehearsal: bool = False) -> 
         raise RehearsalArtifact(f'记忆库 {path} 是演练产物或来源不明（meta.rehearsal={store.meta.get("rehearsal")!r}），'
                                 '不能用于正式运行；请用正式记录重新 build-memory')
     bm = settings.get('bm25', {})
+    env = None
+    if cfg.get('env', 'db_bench') != 'db_bench':
+        from .envs import get_env
+        env = get_env(cfg)
     return Retriever(store, settings.get('k_examples', 3), settings.get('k_insights', 3),
-                     settings.get('k_repairs', 2), bm.get('k1', 1.2), bm.get('b', 0.75))
+                     settings.get('k_repairs', 2), bm.get('k1', 1.2), bm.get('b', 0.75), env=env)
 
 
 def table_key(condition: str) -> str | None:
@@ -137,6 +158,9 @@ def _table(cfg: dict, key: str = 'risk_table') -> RiskTable:
 def make_policy(condition: str, cfg: dict, counter: TokenCounter, allow_rehearsal_memory: bool = False):
     """allow_rehearsal_memory：只在不付费的演练与查看提示时为 True。"""
     base, _ = split_condition(condition)
+    if cfg.get('env', 'db_bench') != 'db_bench' and (
+            table_key(base) not in (None, 'js_table') or base.startswith('llmlingua2')):
+        raise ValueError(f'条件 {base} 只在 db_bench 环境实现（风险表与 LLMLingua-2 基线尚未接入其他环境）')
     policy = _make_base_policy(base, cfg, counter)
     if base == 'nomem':
         policy.name = 'nomem'

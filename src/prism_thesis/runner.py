@@ -29,6 +29,7 @@ from .agent import run_episode, task_features
 from .config import ROOT, make_policy, memory_path, memory_settings, split_condition, table_key, table_path
 from .data import Task
 from .env import MySQLServer, TaskSession
+from .envs import get_env
 from .tokens import TokenCounter
 
 
@@ -54,7 +55,9 @@ def _canon(obj) -> bytes:
 
 # 不影响运行行为的模块：改动它们不改变指纹。记忆库构建（memory/build.py）只影响记忆库文件，
 # 而记忆库内容本身计入使用记忆的条件的指纹；这样修改构建代码不会使已完成的无记忆运行失效。
-NON_EXPERIMENT_MODULES = frozenset({'cli.py', 'checks.py', 'stats.py', '__main__.py', 'memory/build.py'})
+NON_EXPERIMENT_MODULES = frozenset({'cli.py', 'checks.py', 'stats.py', '__main__.py', 'memory/build.py',
+                                    'pub/__init__.py', 'pub/__main__.py', 'pub/cli.py', 'pub/seal.py',
+                                    'pub/bird_prep.py', 'pub/os_prep.py'})
 
 
 def experiment_modules() -> list[Path]:
@@ -80,6 +83,12 @@ def experiment_fingerprint(cfg: dict, condition: str, paid: bool = True) -> str:
         'run_seed': cfg['run']['seed'],
         'data': {f: _sha((ROOT / 'data' / f).read_bytes()) for f in ('db_bench.parquet', 'splits.json')},
     }
+    if cfg.get('env', 'db_bench') != 'db_bench':   # 其他环境：数据文件与环境设置由环境给出
+        env = get_env(cfg)
+        del parts['mysql_image']
+        parts['data'] = {f.relative_to(ROOT).as_posix() if f.is_relative_to(ROOT) else f.name: _sha(f.read_bytes())
+                         for f in env.data_files()}
+        parts['env'] = env.fingerprint()
     key = table_key(condition)
     if key:
         path = table_path(cfg, key)
@@ -246,8 +255,9 @@ def run_experiment(cfg: dict, tasks: list[Task], conditions: list[str], reps: in
         log(f'已记录费用达到上限 {budget} 美元，不派发新运行')
         return state
     mcfg = cfg['mysql']
+    env = get_env(cfg) if cfg.get('env', 'db_bench') != 'db_bench' else None    # None：db_bench（MySQL）
     n_workers = workers or cfg['run']['workers']
-    if not mcfg['docker']:
+    if (env is None and not mcfg['docker']) or (env is not None and not env.parallel):
         n_workers = 1
     n_workers = max(1, min(n_workers, len(jobs)))
     price = cfg['price_usd_per_mtok']
@@ -262,8 +272,11 @@ def run_experiment(cfg: dict, tasks: list[Task], conditions: list[str], reps: in
         return (p_in * price['input'] + p_out * price['output']) / 1e6 if paid else 0.0
 
     def worker(idx: int) -> None:
-        server = MySQLServer(image=mcfg['image'], host=mcfg['host'], port=mcfg['base_port'] + idx,
-                             user=mcfg['user'], password=mcfg['password'], docker=mcfg['docker'])
+        if env is None:
+            server = MySQLServer(image=mcfg['image'], host=mcfg['host'], port=mcfg['base_port'] + idx,
+                                 user=mcfg['user'], password=mcfg['password'], docker=mcfg['docker'])
+        else:
+            server = env.make_backend(cfg, idx)
         try:
             with start_lock:
                 server.start(timeout=float(mcfg.get('start_timeout_s', 600)))
@@ -285,17 +298,27 @@ def run_experiment(cfg: dict, tasks: list[Task], conditions: list[str], reps: in
                 try:
                     llm = MeteredLLM(llm_factory(task), counter)
                     rec['model'] = llm.model
-                    with TaskSession(server, task, agent_user=f'agent{idx}',
-                                     statement_timeout_ms=cfg['agent']['statement_timeout_ms']) as session:
+                    if env is None:
+                        opened = TaskSession(server, task, agent_user=f'agent{idx}',
+                                             statement_timeout_ms=cfg['agent']['statement_timeout_ms'])
+                        extra_kw = {}
+                    else:
+                        opened = env.open_session(server, task, idx, cfg)
+                        extra_kw = {'env': env}
+                    with opened as session:
                         ep = run_episode(task, policies[cond], llm, session, counter,
                                          max_rounds=cfg['agent']['max_rounds'],
                                          first_action_only=cfg['agent']['first_action_only'],
-                                         rng=random.Random(seed))
-                    f = task_features(task)
+                                         rng=random.Random(seed), **extra_kw)
                     rec.update(asdict(ep))
-                    rec.update({'n_experiences': len({u for t in ep.turns for u in t['experiences']}),
-                                'task_type_pred': f.task_type, 'is_query': task.is_query,
-                                'predicted_functions': sorted(f.predicted_functions), 'n_turns': len(ep.turns)})
+                    rec['n_experiences'] = len({u for t in ep.turns for u in t['experiences']})
+                    if env is None:
+                        f = task_features(task)
+                        rec.update({'task_type_pred': f.task_type, 'is_query': task.is_query,
+                                    'predicted_functions': sorted(f.predicted_functions)})
+                    else:
+                        rec.update(env.record_extras(task, env.task_features(task)))
+                    rec['n_turns'] = len(ep.turns)
                     rec.update({'model_calls': llm.calls, 'cost_complete': llm.complete,
                                 'cost_usd_est': cost_of(llm.prompt_tokens, llm.completion_tokens)})
                 except Exception as e:  # noqa: BLE001  接口或数据库故障：记录后续跑时重做
